@@ -77,13 +77,16 @@ def isim_kisalt(stok_adi):
     return tr_clean_for_pdf(full_name)
 
 def get_standart_paket_icerigi(tip, model_adi):
+    # AMBALAJ İSMİNİ STANDARTLAŞTIRDIK (ARTIK BİRLEŞECEK)
+    ambalaj_ismi = "GENEL AMBALAJLAMA (Karton+ balon + Strec)"
+    
     if tip == 'HAVLUPAN':
         return [
             (1, "Adet", "1/2 PURJOR"),
             (1, "Takim", "3 LU HAVLUPAN MONTAJ SETI"),
             (3, "Adet", "DUBEL"),
             (3, "Adet", "MONTAJ VIDASI"),
-            (1, "Set", "AMBALAJ (BALONLU NAYLON + STREC)")
+            (1, "Set", ambalaj_ismi)
         ]
     else:
         ayak_ismi = f"{tr_clean_for_pdf(model_adi)} AYAK TAKIMI" if model_adi != "STANDART" else "RADYATOR AYAK TAKIMI"
@@ -93,14 +96,14 @@ def get_standart_paket_icerigi(tip, model_adi):
             (1, "Takim", ayak_ismi),
             (8, "Adet", "DUBEL"),
             (8, "Adet", "MONTAJ VIDASI"),
-            (1, "Set", "AMBALAJ (KOSE KARTONU + STREC)")
+            (1, "Set", ambalaj_ismi)
         ]
 
 def hesapla_ve_analiz_et(stok_adi, adet):
     if not isinstance(stok_adi, str): return None
     stok_adi_islenen = tr_lower(stok_adi)
     
-    # DÜZELTME BURADA: Varsayılan derinlik 10.0'dan 4.5'e çekildi.
+    # Kalınlık Fix (V13'ten gelen)
     base_derinlik = 4.5 
     
     bulunan_model_adi = "Standart"
