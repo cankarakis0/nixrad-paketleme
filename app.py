@@ -20,7 +20,6 @@ except:
 # =============================================================================
 # 1. AYARLAR
 # =============================================================================
-# Tarayıcı sekme başlığını da güncelledim
 st.set_page_config(page_title="Nixrad by NETMAKER", layout="wide")
 
 AYARLAR = {
@@ -100,7 +99,10 @@ def get_standart_paket_icerigi(tip, model_adi):
 def hesapla_ve_analiz_et(stok_adi, adet):
     if not isinstance(stok_adi, str): return None
     stok_adi_islenen = tr_lower(stok_adi)
-    base_derinlik = 10.0
+    
+    # DÜZELTME BURADA: Varsayılan derinlik 10.0'dan 4.5'e çekildi.
+    base_derinlik = 4.5 
+    
     bulunan_model_adi = "Standart"
     for model, derinlik in MODEL_DERINLIKLERI.items():
         if model in stok_adi_islenen:
@@ -139,7 +141,7 @@ def hesapla_ve_analiz_et(stok_adi, adet):
     }
 
 # =============================================================================
-# PDF 1: KARGO FİŞİ (V11 - KIRMIZI BANTLI)
+# PDF 1: KARGO FİŞİ
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO()
@@ -150,7 +152,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     style_normal = ParagraphStyle('n', parent=styles['Normal'], fontSize=10, leading=12)
     style_header = ParagraphStyle('h', parent=styles['Normal'], fontSize=14, leading=16, fontName='Helvetica-Bold', textColor=colors.darkred)
     
-    # 1. GÖNDERİCİ ve ÖDEME
     gonderen_info = [
         Paragraph("<b>GONDEREN FIRMA:</b>", style_normal),
         Paragraph("NIXRAD / KARPAN DIZAYN A.S.", style_header),
@@ -176,7 +177,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     elements.append(t_header)
     elements.append(Spacer(1, 0.5*cm))
     
-    # 2. ALICI KUTUSU (DEV PUNTOLAR)
     alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD']) if musteri_bilgileri['AD_SOYAD'] else "....."
     alici_tel = musteri_bilgileri['TELEFON'] if musteri_bilgileri['TELEFON'] else "....."
     raw_adres = musteri_bilgileri['ADRES'] if musteri_bilgileri['ADRES'] else "Adres Girilmedi"
@@ -184,23 +184,20 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     
     alici_content = [
         Paragraph("<b>ALICI MUSTERI:</b>", style_normal),
-        # İsim: 22 Punto
         Paragraph(f"<b>{alici_ad}</b>", ParagraphStyle('alici_ad_huge', fontSize=22, leading=26, fontName='Helvetica-Bold', spaceBefore=6, spaceAfter=12)),
         Paragraph(f"<b>Tel:</b> {alici_tel}", ParagraphStyle('tel_big', fontSize=12, leading=14)),
         Spacer(1, 0.5*cm),
-        # Adres: 16 Punto
         Paragraph(f"<b>ADRES:</b><br/>{clean_adres}", ParagraphStyle('adres_style_big', fontSize=15, leading=20))
     ]
     
     t_alici = Table([[alici_content]], colWidths=[19*cm])
     t_alici.setStyle(TableStyle([
-        ('BOX', (0,0), (-1,-1), 2, colors.black), # Kalın Çerçeve
+        ('BOX', (0,0), (-1,-1), 2, colors.black),
         ('PADDING', (0,0), (-1,-1), 15),
     ]))
     elements.append(t_alici)
     elements.append(Spacer(1, 0.5*cm))
     
-    # 3. PAKET LİSTESİ
     elements.append(Paragraph("<b>PAKET ICERIK OZETI:</b>", ParagraphStyle('b', fontSize=10, fontName='Helvetica-Bold')))
     elements.append(Spacer(1, 0.2*cm))
     
@@ -224,7 +221,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     ]))
     elements.append(t_pkt)
     
-    # 4. TOPLAM
     elements.append(Spacer(1, 0.5*cm))
     summary_data = [
         [f"TOPLAM PARCA: {toplam_parca}", f"TOPLAM DESI: {proje_toplam_desi:.2f}"]
@@ -241,9 +237,7 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     elements.append(t_sum)
     elements.append(Spacer(1, 1*cm))
     
-    # 5. KIRMIZI BANTLI UYARI
     warning_title = Paragraph("<b>DIKKAT KIRILIR !</b>", ParagraphStyle('WT', fontSize=26, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold'))
-    
     warning_text = """
     SAYIN MUSTERIMIZ,<br/>
     GELEN KARGONUZUN BULUNDUGU PAKETLERIN SAGLAM VE PAKETLERDE EZIKLIK OLMADIGINI
@@ -252,14 +246,13 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     """
     warning_para = Paragraph(warning_text, ParagraphStyle('warn', alignment=TA_CENTER, textColor=colors.white, fontSize=11, leading=14, fontName='Helvetica-Bold'))
     
-    # Kırmızı Zeminli Tablo
     t_warn = Table([[warning_title], [warning_para]], colWidths=[19*cm])
     t_warn.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,-1), colors.red), # KIRMIZI ZEMİN
+        ('BACKGROUND', (0,0), (-1,-1), colors.red),
         ('BOX', (0,0), (-1,-1), 1, colors.black),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
         ('PADDING', (0,0), (-1,-1), 10),
-        ('BOTTOMPADDING', (0,0), (-1,0), 10), # Başlık ile metin arası boşluk
+        ('BOTTOMPADDING', (0,0), (-1,0), 10),
     ]))
     elements.append(t_warn)
     
@@ -268,7 +261,7 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     return buffer
 
 # =============================================================================
-# PDF 2: ÜRETİM & ETİKETLER (Metin Kayması Düzeltildi)
+# PDF 2: ÜRETİM & ETİKETLER
 # =============================================================================
 def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     buffer = io.BytesIO()
@@ -276,20 +269,14 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     elements = []
     styles = getSampleStyleSheet()
     
-    # Başlık
     cust_name = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD']) if musteri_bilgileri['AD_SOYAD'] else "Isim Girilmedi"
     elements.append(Paragraph(f"URETIM & PAKETLEME EMRI - {cust_name}", ParagraphStyle('Title', fontSize=16, alignment=TA_CENTER, fontName='Helvetica-Bold', spaceAfter=15)))
     
-    # Malzeme Tablosu (WRAP ÖZELLİĞİ EKLENDİ)
     data = [['MALZEME ADI', 'ADET', 'KONTROL']]
-    
-    # Malzeme isimleri için wrapping stil
     style_malz = ParagraphStyle('malz_style', fontSize=10, fontName='Helvetica')
-    
     for malz, mik in tum_malzemeler.items():
         adet = f"{int(mik)}" if mik % 1 == 0 else f"{mik:.1f}"
         malz_clean = tr_clean_for_pdf(malz)
-        # Malzeme adını Paragraph içine koyuyoruz, böylece uzun isimler alt satıra geçer
         data.append([Paragraph(malz_clean, style_malz), adet, "___"])
         
     t = Table(data, colWidths=[14*cm, 2*cm, 3*cm])
@@ -299,13 +286,12 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('ALIGN', (1,0), (-1,-1), 'CENTER'),
         ('ALIGN', (2,0), (-1,-1), 'CENTER'),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), # Dikey ortalama
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('PADDING', (0,0), (-1,-1), 6),
     ]))
     elements.append(t)
     elements.append(Spacer(1, 1*cm))
     
-    # İmza
     signature_data = [
         ["PAKETLEYEN PERSONEL", "", ""],
         ["Adi Soyadi: ....................................", "", ""],
@@ -324,7 +310,6 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     elements.append(Paragraph("ASAGIDAKI ETIKETLERI KESIP KOLILERE YAPISTIRINIZ (6x6 cm)", ParagraphStyle('Small', fontSize=8, alignment=TA_CENTER)))
     elements.append(Spacer(1, 0.5*cm))
     
-    # Etiketler
     sticker_data = []
     row = []
     style_center = ParagraphStyle('c', parent=styles['Normal'], alignment=TA_CENTER, fontSize=9)
@@ -379,7 +364,6 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
 # 3. WEB ARAYÜZÜ
 # =============================================================================
 
-# BAŞLIK GÜNCELLENDİ: NETMAKER LİNKİ EKLENDİ
 st.markdown(
     """
     # 📦 NIXRAD Paketleme Sistemi 
@@ -475,7 +459,7 @@ if uploaded_file:
             col_pdf1, col_pdf2 = st.columns(2)
             
             pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, etiket_listesi)
-            col_pdf1.download_button(label="📄 1. KARGO FISI (Adres Fix)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
+            col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
 
             pdf_production = create_production_pdf(tum_malzemeler, etiket_listesi, musteri_data)
             col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
