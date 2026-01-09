@@ -27,14 +27,15 @@ AYARLAR = {
     'RADYATOR': {'PAY_GENISLIK': 3.5, 'PAY_YUKSEKLIK': 0.5, 'PAY_DERINLIK': 3.0}
 }
 
-# GÜNCELLEME BURADA: 'livera' eklendi (Yazım hatası olsa bile tanısın diye)
+# Model Derinlikleri (Gövde Kalınlıkları)
 MODEL_DERINLIKLERI = {
     'nirvana': 5.0, 'kumbaros': 4.5, 'floransa': 4.8, 'prag': 4.0,
     'lizyantus': 4.0, 'lisa': 4.5, 'akasya': 4.0, 'hazal': 3.0,
     'aspar': 4.0, 'livara': 4.5, 'livera': 4.5
 }
 
-ZORUNLU_HAVLUPANLAR = ['hazal', 'lisa', 'lizyantus']
+# ZORUNLU HAVLUPAN LİSTESİ (GÜNCELLENDİ: Kumbaros Eklendi)
+ZORUNLU_HAVLUPANLAR = ['hazal', 'lisa', 'lizyantus', 'kumbaros']
 
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
 
@@ -113,7 +114,6 @@ def hesapla_ve_analiz_et(stok_adi, adet):
     for model, derinlik in MODEL_DERINLIKLERI.items():
         if model in stok_adi_islenen:
             base_derinlik = derinlik
-            # Eğer 'livera' bulduysa ekranda düzgün görünsün diye 'Livara' yapalım
             if model == 'livera':
                 bulunan_model_adi = "Livara"
             else:
