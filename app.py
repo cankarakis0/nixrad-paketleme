@@ -26,7 +26,7 @@ except:
 # =============================================================================
 # 1. AYARLAR & GÜVENLİK
 # =============================================================================
-st.set_page_config(page_title="Nixrad by NETMAKER", layout="wide")
+st.set_page_config(page_title="Nixrad Yönetim Paneli", layout="wide", initial_sidebar_state="expanded")
 
 # Şifre Kontrol
 def check_password():
@@ -65,11 +65,11 @@ def save_to_google_sheets(veriler):
         try:
             sheet = client.open("Nixrad Veritabani").sheet1
             sheet.append_rows(veriler)
-            return True, "Kayit basarili!"
+            return True, "Kayıt Başarılı!"
         except Exception as e:
             return False, f"Hata: {e}"
     else:
-        return False, "Veritabani baglantisi kurulamadi."
+        return False, "Veritabanı bağlantı hatası."
 
 def get_data_from_google_sheets():
     client = init_connection()
@@ -81,6 +81,20 @@ def get_data_from_google_sheets():
         except:
             return pd.DataFrame()
     return pd.DataFrame()
+
+def delete_row_from_google_sheets(row_index):
+    """Belirtilen satır numarasını siler (row_index 0'dan başlar, sheets 1'den başlar + header)"""
+    client = init_connection()
+    if client:
+        try:
+            sheet = client.open("Nixrad Veritabani").sheet1
+            # Dataframe indexi 0 ise, Sheet'te Header(1) + 1 = 2. satırdır.
+            # Gspread delete_rows indexi 1 tabanlıdır.
+            sheet.delete_rows(row_index + 2) 
+            return True, "Silindi"
+        except Exception as e:
+            return False, str(e)
+    return False, "Bağlantı yok"
 
 # Ayarlar
 AYARLAR = {
@@ -105,22 +119,14 @@ RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
 # =============================================================================
 
 def safe_float_convert(val):
-    """Excel'den gelen 1.250,50 gibi verileri düzgün sayıya çevirir."""
     try:
-        if isinstance(val, (int, float)):
-            return float(val)
+        if isinstance(val, (int, float)): return float(val)
         val_str = str(val).strip()
-        # Eğer hem nokta hem virgül varsa (örn: 1.250,50)
-        if '.' in val_str and ',' in val_str:
-            val_str = val_str.replace('.', '').replace(',', '.')
-        # Sadece virgül varsa (örn: 500,50)
-        elif ',' in val_str:
-            val_str = val_str.replace(',', '.')
-        # TL vb. yazıları temizle
+        if '.' in val_str and ',' in val_str: val_str = val_str.replace('.', '').replace(',', '.')
+        elif ',' in val_str: val_str = val_str.replace(',', '.')
         val_str = re.sub(r'[^\d.]', '', val_str)
         return float(val_str)
-    except:
-        return 0.0
+    except: return 0.0
 
 def tr_clean_for_pdf(text):
     if not isinstance(text, str): return str(text)
@@ -210,7 +216,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return round(desi, 2), f"{k_en}x{k_boy}x{k_derin}cm", round(kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (ORİJİNAL KODLAR)
+# PDF FONKSİYONLARI
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
@@ -283,7 +289,7 @@ odeme_tipi = st.sidebar.radio("Odeme Tipi", ["ALICI", "PESIN"], index=0)
 musteri_data = {'AD_SOYAD': ad_soyad, 'TELEFON': telefon, 'ADRES': adres, 'ODEME_TIPI': odeme_tipi}
 
 # SEKMELER (TABS)
-tab_dosya, tab_manuel, tab_rapor = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı", "📊 Yönetim Paneli (Şifreli)"])
+tab_dosya, tab_manuel, tab_rapor = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı", "📊 Yönetim & Rapor (Şifreli)"])
 
 # --- TAB 1: DOSYA YÜKLEME ---
 with tab_dosya:
@@ -308,26 +314,27 @@ with tab_dosya:
                 try: df = df[['Stok Adı', 'Miktar']]
                 except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
                 
-                # TUTAR SÜTUNUNU GÜVENLİ ŞEKİLDE BUL
+                # TUTAR VE ŞEHİR SÜTUNLARINI BUL
                 col_tutar = None
+                col_sehir = None
                 for c in df_raw.iloc[header_index].values:
                     c_str = str(c)
-                    if any(x in c_str for x in ["Net Tutar", "Tutar", "Toplam"]):
-                        col_tutar = c_str
-                        break
+                    if any(x in c_str for x in ["Net Tutar", "Tutar", "Toplam"]): col_tutar = c_str
+                    if any(x in c_str.lower() for x in ["il/ilçe", "şehir", "sehir", "il"]): col_sehir = c_str
+                
+                # Dataframe'e ekle
                 if col_tutar:
-                     # Eğer tutar varsa, ana dataframe'e güvenli şekilde ekle
-                     try:
-                         df[col_tutar] = df_raw[header_index + 1:][col_tutar].values
-                     except:
-                         col_tutar = None # Eşleşme hatası olursa yoksay
+                     try: df[col_tutar] = df_raw[header_index + 1:][col_tutar].values
+                     except: col_tutar = None
+                if col_sehir:
+                     try: df[col_sehir] = df_raw[header_index + 1:][col_sehir].values
+                     except: col_sehir = None
 
                 df = df.dropna(subset=['Stok Adı'])
                 
                 tum_malzemeler, etiket_listesi = {}, []
                 proje_toplam_desi, toplam_parca, global_counter = 0, 0, 1
-                proje_toplam_kg = 0 
-                proje_toplam_tutar = 0
+                proje_toplam_kg, proje_toplam_tutar = 0, 0
                 
                 tablo_verisi = []
                 db_kayitlari = []
@@ -336,15 +343,16 @@ with tab_dosya:
                     try: adet = float(row['Miktar'])
                     except: adet = 0
                     
-                    # Tutar Okuma (Güvenli)
+                    # Tutar Okuma
                     birim_tutar = 0
                     if col_tutar:
-                        try:
-                            # Hücre değerini güvenli oku ve temizle
-                            raw_val = row[col_tutar]
-                            birim_tutar = safe_float_convert(raw_val)
-                        except:
-                            birim_tutar = 0
+                        try: birim_tutar = safe_float_convert(row[col_tutar])
+                        except: birim_tutar = 0
+                    
+                    # Şehir Okuma
+                    sehir = ""
+                    if col_sehir:
+                        sehir = str(row[col_sehir]) if pd.notna(row[col_sehir]) else ""
                     
                     stok_adi = str(row['Stok Adı']); stok_lower = tr_lower(stok_adi)
                     
@@ -380,8 +388,9 @@ with tab_dosya:
                                     "Tutar": f"{birim_tutar:,.2f} TL"
                                 })
                                 
+                                # Veritabanı Kaydı (Şehir Eklendi)
                                 db_kayitlari.append([
-                                    str(tarih_secimi), ad_soyad, urun_adi, urun_olcu, int(adet), birim_tutar, "Excel"
+                                    str(tarih_secimi), ad_soyad, urun_adi, urun_olcu, int(adet), birim_tutar, sehir, "Excel"
                                 ])
                                 
                                 for _ in range(int(adet)):
@@ -447,10 +456,8 @@ with tab_manuel:
         secilen_model = st.selectbox("Model Seçin", display_models)
         model_lower = secilen_model.lower()
         is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
-        if is_havlupan:
-            l1, l2, v1_d, v2_d = "Genişlik (cm)", "Yükseklik (cm)", 50, 70
-        else:
-            l1, l2, v1_d, v2_d = "Yükseklik (cm)", "Genişlik (cm)", 60, 100
+        if is_havlupan: l1, l2, v1_d, v2_d = "Genişlik (cm)", "Yükseklik (cm)", 50, 70
+        else: l1, l2, v1_d, v2_d = "Yükseklik (cm)", "Genişlik (cm)", 60, 100
         
     with c2: val_1 = st.number_input(l1, min_value=10, value=v1_d)
     with c3: val_2 = st.number_input(l2, min_value=10, value=v2_d)
@@ -463,13 +470,8 @@ with tab_manuel:
         birim_desi, boyut_str, birim_kg = manuel_hesapla(secilen_model, g_input, y_input, m_adet)
         
         st.session_state['manuel_liste'].append({
-            "Model": secilen_model,
-            "Ölçü (ExB)": f"{g_input} x {y_input}",
-            "Kutulu Ölçü": boyut_str,
-            "Adet": m_adet,
-            "Birim Desi": birim_desi,
-            "Toplam Desi": round(birim_desi * m_adet, 2),
-            "Toplam Ağırlık": f"{birim_kg:.2f} KG"
+            "Model": secilen_model, "Ölçü": f"{g_input} x {y_input}", "Kutu": boyut_str,
+            "Adet": m_adet, "Desi": round(birim_desi * m_adet, 2), "KG": f"{birim_kg:.2f}"
         })
         st.success("Eklendi!")
 
@@ -479,19 +481,20 @@ with tab_manuel:
         st.dataframe(df_manuel, use_container_width=True)
         
         t_adet = df_manuel['Adet'].sum()
-        t_desi = df_manuel['Toplam Desi'].sum()
-        try: t_kg = sum([float(x['Toplam Ağırlık'].replace(' KG','')) for x in st.session_state['manuel_liste']])
+        t_desi = df_manuel['Desi'].sum()
+        try: t_kg = sum([float(str(x['KG'])) for x in st.session_state['manuel_liste']])
         except: t_kg = 0
         
         c_tot1, c_tot2, c_tot3 = st.columns(3)
         c_tot1.metric("Toplam Parça", t_adet)
         c_tot2.metric("Genel Toplam Desi", f"{t_desi:.2f}")
-        c_tot3.metric("Genel Toplam Ağırlık (Havlupan Hariç)", f"{t_kg:.2f} KG")
+        c_tot3.metric("Genel Toplam Ağırlık", f"{t_kg:.2f} KG")
         
         if ad_soyad and st.button("💾 Manuel Listeyi Veritabanına Kaydet"):
             man_kayitlar = []
             for item in st.session_state['manuel_liste']:
-                man_kayitlar.append([str(tarih_secimi), ad_soyad, item['Model'], item['Ölçü (ExB)'], item['Adet'], 0, "Manuel"])
+                # Manuel kayıtta şehir boş gider
+                man_kayitlar.append([str(tarih_secimi), ad_soyad, item['Model'], item['Ölçü'], item['Adet'], 0, "", "Manuel"])
             basari, m = save_to_google_sheets(man_kayitlar)
             if basari: st.success("Manuel liste kaydedildi!"); st.session_state['manuel_liste'] = []
             else: st.error(m)
@@ -500,50 +503,99 @@ with tab_manuel:
             st.session_state['manuel_liste'] = []
             st.rerun()
 
-# --- TAB 3: YÖNETİM PANELİ (ŞİFRELİ) ---
+# --- TAB 3: YÖNETİM & RAPORLAR (GELİŞMİŞ) ---
 with tab_rapor:
     if check_password():
-        st.success("🔓 Yönetici Girişi Başarılı")
+        st.success("🔓 Yönetici Paneli")
         df_rapor = get_data_from_google_sheets()
         
         if not df_rapor.empty:
-            # Temizleme ve Sayısallaştırma
+            # Veri Tiplerini Düzelt
+            df_rapor['Tarih'] = pd.to_datetime(df_rapor['Tarih'], dayfirst=True, errors='coerce')
             df_rapor['Tutar'] = pd.to_numeric(df_rapor['Tutar'], errors='coerce').fillna(0)
             df_rapor['Adet'] = pd.to_numeric(df_rapor['Adet'], errors='coerce').fillna(0)
+            # Tarih formatına çevrilemeyenler (Manuel yazılanlar vs) için bugünün tarihi atayalım veya filtreleyelim
+            df_rapor = df_rapor.dropna(subset=['Tarih'])
+            df_rapor['Ay_Yil'] = df_rapor['Tarih'].dt.strftime('%Y-%m') # Sıralama için YYYY-MM
+            df_rapor['Gorunum_Ay'] = df_rapor['Tarih'].dt.strftime('%B %Y') # Türkçe Ay İsimleri (Server diline göre değişebilir)
+
+            # --- FİLTRELER ---
+            st.subheader("🔍 Rapor Filtreleri")
+            c_f1, c_f2 = st.columns(2)
             
-            # Filtreler
-            all_musteri = ["Tümü"] + list(df_rapor['Musteri'].unique())
-            filtre_musteri = st.selectbox("Müşteri Filtrele", all_musteri)
+            # Ay Seçimi
+            aylar_listesi = sorted(df_rapor['Ay_Yil'].unique(), reverse=True)
+            secilen_ay = c_f1.selectbox("Dönem Seçiniz (Ay/Yıl)", ["Tümü"] + aylar_listesi)
             
-            if filtre_musteri != "Tümü":
-                df_rapor = df_rapor[df_rapor['Musteri'] == filtre_musteri]
+            # Müşteri Seçimi
+            musteriler = sorted(df_rapor['Musteri'].astype(str).unique())
+            secilen_musteri = c_f2.selectbox("Müşteri Seçiniz", ["Tümü"] + musteriler)
             
-            # KPI Kartları
-            toplam_ciro = df_rapor['Tutar'].sum()
-            toplam_urun = df_rapor['Adet'].sum()
-            toplam_islem = len(df_rapor)
+            # Filtreleme İşlemi
+            df_filtered = df_rapor.copy()
+            if secilen_ay != "Tümü":
+                df_filtered = df_filtered[df_filtered['Ay_Yil'] == secilen_ay]
+            if secilen_musteri != "Tümü":
+                df_filtered = df_filtered[df_filtered['Musteri'] == secilen_musteri]
+                
+            st.divider()
             
-            k1, k2, k3 = st.columns(3)
-            k1.metric("💰 Toplam Ciro", f"{toplam_ciro:,.2f} TL")
-            k2.metric("📦 Toplam Ürün", f"{toplam_urun} Adet")
-            k3.metric("📝 İşlem Sayısı", toplam_islem)
+            # --- KPI KARTLARI ---
+            top_ciro = df_filtered['Tutar'].sum()
+            top_adet = df_filtered['Adet'].sum()
+            uniq_sehir = df_filtered['Sehir'].nunique() if 'Sehir' in df_filtered.columns else 0
+            
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("💰 Seçili Dönem Ciro", f"{top_ciro:,.2f} TL")
+            k2.metric("📦 Satılan Ürün", f"{top_adet} Adet")
+            k3.metric("🏙️ Farklı Şehir", uniq_sehir)
+            k4.metric("📝 Kayıt Sayısı", len(df_filtered))
             
             st.markdown("---")
             
-            # Grafikler
-            g1, g2 = st.columns(2)
+            # --- GRAFİKLER (TABS) ---
+            tab_g1, tab_g2, tab_g3 = st.tabs(["📈 Ürün Analizi", "🗺️ Şehir Analizi", "📅 Zaman Analizi"])
             
-            with g1:
-                st.subheader("Modellere Göre Dağılım")
-                pie_data = df_rapor.groupby('Model')['Adet'].sum().reset_index()
-                base = alt.Chart(pie_data).encode(theta=alt.Theta("Adet", stack=True), color=alt.Color("Model"))
-                pie = base.mark_arc(outerRadius=120)
-                text = base.mark_text(radius=140).encode(text="Adet", order=alt.Order("Adet", sort="descending"))
-                st.altair_chart(pie + text, use_container_width=True)
+            with tab_g1:
+                st.subheader("En Çok Satılan Modeller")
+                model_data = df_filtered.groupby('Model')['Adet'].sum().reset_index().sort_values('Adet', ascending=False)
+                st.bar_chart(model_data, x='Model', y='Adet')
                 
-            with g2:
-                st.subheader("Son İşlemler")
-                st.dataframe(df_rapor.tail(10)[['Tarih','Musteri','Model','Adet','Tutar']], use_container_width=True)
+            with tab_g2:
+                if 'Sehir' in df_filtered.columns:
+                    st.subheader("Şehirlere Göre Dağılım")
+                    sehir_data = df_filtered.groupby('Sehir')['Adet'].sum().reset_index().sort_values('Adet', ascending=False)
+                    st.bar_chart(sehir_data, x='Sehir', y='Adet')
+                else:
+                    st.warning("Veritabanında Şehir sütunu bulunamadı.")
+            
+            with tab_g3:
+                st.subheader("Günlük Satış Trendi")
+                time_data = df_filtered.groupby('Tarih')['Tutar'].sum().reset_index()
+                st.line_chart(time_data, x='Tarih', y='Tutar')
+
+            st.divider()
+            
+            # --- DETAYLI TABLO ---
+            st.subheader("📋 Detaylı Satış Listesi")
+            st.dataframe(df_filtered, use_container_width=True)
+            
+            # --- VERİ SİLME PANELİ ---
+            st.error("🗑️ Kayıt Silme Alanı")
+            with st.expander("Veri Silmek İçin Tıklayın (Dikkat!)"):
+                st.write("Aşağıdaki listeden silmek istediğiniz kaydın solundaki kutucuğu değil, **Index numarasını** (en soldaki sayı) not edip aşağıya yazın.")
+                # Tüm veriyi göster (Index'i ile beraber)
+                st.dataframe(df_rapor.sort_values('Tarih', ascending=False).reset_index(), use_container_width=True)
                 
+                row_to_delete = st.number_input("Silinecek Satırın Index Numarası (Orijinal Tablodaki)", min_value=0, step=1)
+                
+                if st.button("❌ Seçili Satırı Kalıcı Olarak Sil"):
+                    basari, msj = delete_row_from_google_sheets(row_to_delete)
+                    if basari:
+                        st.success("Satır silindi! Sayfa yenileniyor...")
+                        st.rerun()
+                    else:
+                        st.error(f"Silinemedi: {msj}")
+            
         else:
-            st.info("Henüz veritabanında kayıt yok.")
+            st.info("Veritabanı şu an boş.")
