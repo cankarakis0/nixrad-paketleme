@@ -20,7 +20,7 @@ except:
 # =============================================================================
 # 1. AYARLAR
 # =============================================================================
-st.set_page_config(page_title="Nixrad Paketleme", layout="wide")
+st.set_page_config(page_title="Nixrad Operasyon", layout="wide")
 
 AYARLAR = {
     'HAVLUPAN': {'PAY_GENISLIK': 1.5, 'PAY_YUKSEKLIK': 0.5, 'PAY_DERINLIK': 0.5},
@@ -111,7 +111,7 @@ def get_standart_paket_icerigi(tip, model_adi):
             (1, "Set", ambalaj_ismi)
         ]
 
-# --- AĞIRLIK HESAPLAMA ---
+# --- AKILLI DİLİM VE AĞIRLIK HESAPLAMA ---
 def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
     if model_key not in MODEL_AGIRLIKLARI:
         return 0
@@ -186,7 +186,6 @@ def hesapla_ve_analiz_et(stok_adi, adet):
         
         desi = (kutulu_en * kutulu_boy * kutulu_derinlik) / 3000
         desi_sonuc = round(desi, 2)
-        
         agirlik_sonuc = agirlik_hesapla(stok_adi, genislik, yukseklik, bulunan_model_key)
         
         etiket_verisi = {
@@ -202,13 +201,10 @@ def hesapla_ve_analiz_et(stok_adi, adet):
         'Toplam_Agirlik': agirlik_sonuc * adet
     }
 
-# MANUEL HESAPLAMA FONKSİYONU
 def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     model_lower = model_secimi.lower()
-    
     is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
     tip = 'HAVLUPAN' if is_havlupan else 'RADYATOR'
-    
     base_derinlik = 4.5
     model_key = "standart"
     
@@ -219,20 +215,16 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
             break
             
     paylar = AYARLAR[tip]
-    
     kutulu_en = genislik + paylar['PAY_GENISLIK']
     kutulu_boy = yukseklik + paylar['PAY_YUKSEKLIK']
     kutulu_derinlik = base_derinlik + paylar['PAY_DERINLIK']
-    
     desi = (kutulu_en * kutulu_boy * kutulu_derinlik) / 3000
-    
-    # Manuelde Ağırlık Hesabı
     birim_kg = agirlik_hesapla("", genislik, yukseklik, model_key)
     
     return round(desi, 2), f"{kutulu_en}x{kutulu_boy}x{kutulu_derinlik}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (ORİJİNAL TASARIM)
+# PDF FONKSİYONLARI (ORİJİNAL)
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO()
@@ -449,7 +441,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     return buffer
 
 # =============================================================================
-# 3. WEB ARAYÜZÜ (GÜNCELLENDİ: TABS SİSTEMİ)
+# 3. WEB ARAYÜZÜ
 # =============================================================================
 
 st.markdown(
@@ -470,7 +462,7 @@ musteri_data = {'AD_SOYAD': ad_soyad, 'TELEFON': telefon, 'ADRES': adres, 'ODEME
 # SEKMELER (TABS)
 tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı"])
 
-# --- TAB 1: DOSYA YÜKLEME (ESKİ SİSTEM) ---
+# --- TAB 1: DOSYA YÜKLEME ---
 with tab_dosya:
     uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
 
@@ -572,7 +564,7 @@ with tab_dosya:
         except Exception as e:
             st.error(f"Hata: {e}")
 
-# --- TAB 2: MANUEL HESAPLAYICI (GÜNCELLENDİ) ---
+# --- TAB 2: MANUEL HESAPLAYICI ---
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
     
@@ -582,7 +574,6 @@ with tab_manuel:
     # Giriş Alanları
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
-        # Menüde sadece doğru isimler görünsün, yanlış 'livera' görünmesin diye filtreliyoruz
         display_models = ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera']
         secilen_model = st.selectbox("Model Seçin", display_models)
         
