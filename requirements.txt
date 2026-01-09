@@ -3,5 +3,3 @@ pandas
 openpyxl
 reportlab
 matplotlib
-gspread
-oauth2client
