@@ -27,11 +27,14 @@ AYARLAR = {
     'RADYATOR': {'PAY_GENISLIK': 3.5, 'PAY_YUKSEKLIK': 0.5, 'PAY_DERINLIK': 3.0}
 }
 
+# GÜNCELLEME BURADA: 'livera' eklendi (Yazım hatası olsa bile tanısın diye)
 MODEL_DERINLIKLERI = {
     'nirvana': 5.0, 'kumbaros': 4.5, 'floransa': 4.8, 'prag': 4.0,
     'lizyantus': 4.0, 'lisa': 4.5, 'akasya': 4.0, 'hazal': 3.0,
-    'aspar': 4.0, 'livara': 4.5
+    'aspar': 4.0, 'livara': 4.5, 'livera': 4.5
 }
+
+ZORUNLU_HAVLUPANLAR = ['hazal', 'lisa', 'lizyantus']
 
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
 
@@ -64,6 +67,7 @@ def isim_kisalt(stok_adi):
         if tr_upper(m) in stok_upper:
             model_adi = tr_upper(m)
             break
+    
     boyut = ""
     boyut_match = re.search(r'(\d+)\s*[/xX]\s*(\d+)', stok_adi)
     if boyut_match:
@@ -77,7 +81,6 @@ def isim_kisalt(stok_adi):
     return tr_clean_for_pdf(full_name)
 
 def get_standart_paket_icerigi(tip, model_adi):
-    # AMBALAJ İSMİNİ STANDARTLAŞTIRDIK (ARTIK BİRLEŞECEK)
     ambalaj_ismi = "GENEL AMBALAJLAMA (Karton+ balon + Strec)"
     
     if tip == 'HAVLUPAN':
@@ -103,19 +106,31 @@ def hesapla_ve_analiz_et(stok_adi, adet):
     if not isinstance(stok_adi, str): return None
     stok_adi_islenen = tr_lower(stok_adi)
     
-    # Kalınlık Fix (V13'ten gelen)
     base_derinlik = 4.5 
     
     bulunan_model_adi = "Standart"
+    
     for model, derinlik in MODEL_DERINLIKLERI.items():
         if model in stok_adi_islenen:
             base_derinlik = derinlik
-            bulunan_model_adi = model.capitalize()
+            # Eğer 'livera' bulduysa ekranda düzgün görünsün diye 'Livara' yapalım
+            if model == 'livera':
+                bulunan_model_adi = "Livara"
+            else:
+                bulunan_model_adi = model.capitalize()
             break
             
-    tip = 'HAVLUPAN' if 'havlupan' in stok_adi_islenen else 'RADYATOR'
+    is_havlupan_name = 'havlupan' in stok_adi_islenen
+    is_zorunlu_model = any(z in stok_adi_islenen for z in ZORUNLU_HAVLUPANLAR)
+    
+    if is_havlupan_name or is_zorunlu_model:
+        tip = 'HAVLUPAN'
+    else:
+        tip = 'RADYATOR'
+        
     reçete = get_standart_paket_icerigi(tip, tr_upper(bulunan_model_adi))
     paylar = AYARLAR[tip]
+    
     boyutlar = re.search(r'(\d+)\s*[/xX]\s*(\d+)', stok_adi)
     etiket_verisi = None
     desi_sonuc = 0
@@ -126,11 +141,14 @@ def hesapla_ve_analiz_et(stok_adi, adet):
             genislik, yukseklik = val1, val2
         else:
             yukseklik, genislik = val1, val2
+            
         kutulu_en = genislik + paylar['PAY_GENISLIK']
         kutulu_boy = yukseklik + paylar['PAY_YUKSEKLIK']
         kutulu_derinlik = base_derinlik + paylar['PAY_DERINLIK']
+        
         desi = (kutulu_en * kutulu_boy * kutulu_derinlik) / 3000
         desi_sonuc = round(desi, 2)
+        
         etiket_verisi = {
             'kisa_isim': isim_kisalt(stok_adi),
             'boyut_str': f"{kutulu_en}x{kutulu_boy}x{kutulu_derinlik}cm",
@@ -143,8 +161,30 @@ def hesapla_ve_analiz_et(stok_adi, adet):
         'Toplam_Desi': desi_sonuc * adet
     }
 
+# MANUEL HESAPLAMA FONKSİYONU
+def manuel_hesapla(model_secimi, genislik, yukseklik):
+    model_lower = model_secimi.lower()
+    
+    is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
+    tip = 'HAVLUPAN' if is_havlupan else 'RADYATOR'
+    
+    base_derinlik = 4.5 
+    for m_key, m_val in MODEL_DERINLIKLERI.items():
+        if m_key in model_lower:
+            base_derinlik = m_val
+            break
+            
+    paylar = AYARLAR[tip]
+    
+    kutulu_en = genislik + paylar['PAY_GENISLIK']
+    kutulu_boy = yukseklik + paylar['PAY_YUKSEKLIK']
+    kutulu_derinlik = base_derinlik + paylar['PAY_DERINLIK']
+    
+    desi = (kutulu_en * kutulu_boy * kutulu_derinlik) / 3000
+    return round(desi, 2), f"{kutulu_en}x{kutulu_boy}x{kutulu_derinlik}cm"
+
 # =============================================================================
-# PDF 1: KARGO FİŞİ
+# PDF FONKSİYONLARI (Cargo & Production)
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO()
@@ -263,9 +303,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     buffer.seek(0)
     return buffer
 
-# =============================================================================
-# PDF 2: ÜRETİM & ETİKETLER
-# =============================================================================
 def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=0.5*cm, leftMargin=0.5*cm, topMargin=1*cm, bottomMargin=1*cm)
@@ -364,7 +401,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     return buffer
 
 # =============================================================================
-# 3. WEB ARAYÜZÜ
+# 3. WEB ARAYÜZÜ (GÜNCELLENDİ: TABS SİSTEMİ)
 # =============================================================================
 
 st.markdown(
@@ -382,92 +419,175 @@ adres = st.sidebar.text_area("Adres (Enter ile alt satira gecebilirsiniz)")
 odeme_tipi = st.sidebar.radio("Odeme Tipi", ["ALICI", "PESIN"], index=0)
 musteri_data = {'AD_SOYAD': ad_soyad, 'TELEFON': telefon, 'ADRES': adres, 'ODEME_TIPI': odeme_tipi}
 
-uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
+# SEKMELER (TABS)
+tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı"])
 
-if uploaded_file:
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            try: df_raw = pd.read_csv(uploaded_file, encoding='utf-8')
-            except: df_raw = pd.read_csv(uploaded_file, encoding='cp1254')
-        else:
-            df_raw = pd.read_excel(uploaded_file)
-            
-        header_index = -1
-        for i, row in df_raw.iterrows():
-            if "Stok Adı" in " ".join([str(v) for v in row.values]): header_index = i; break
-        
-        if header_index != -1:
-            new_header = df_raw.iloc[header_index]
-            df = df_raw[header_index + 1:].copy()
-            df.columns = [str(col).strip() for col in new_header]
-            try: df = df[['Stok Adı', 'Miktar']]
-            except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
-            df = df.dropna(subset=['Stok Adı'])
-            
-            tum_malzemeler, etiket_listesi = {}, []
-            proje_toplam_desi, toplam_parca, global_counter = 0, 0, 1
-            
-            for index, row in df.iterrows():
-                try: adet = float(row['Miktar'])
-                except: adet = 0
-                stok_adi = str(row['Stok Adı']); stok_lower = tr_lower(stok_adi)
+# --- TAB 1: DOSYA YÜKLEME (ESKİ SİSTEM) ---
+with tab_dosya:
+    uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
+
+    if uploaded_file:
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                try: df_raw = pd.read_csv(uploaded_file, encoding='utf-8')
+                except: df_raw = pd.read_csv(uploaded_file, encoding='cp1254')
+            else:
+                df_raw = pd.read_excel(uploaded_file)
                 
-                if adet > 0:
-                    is_vana_accessory = ('vana' in stok_lower) and ('nirvana' not in stok_lower)
-                    is_other_accessory = any(x in stok_lower for x in ['volan', 'tapa', 'aksesuar', 'set', 'termo', 'köşe'])
-                    
-                    if is_vana_accessory or is_other_accessory:
-                         key = f"{stok_adi} (Adet)"
-                         tum_malzemeler[key] = tum_malzemeler.get(key, 0) + adet
-                    
-                    elif 'radyatör' in stok_lower or 'havlupan' in stok_lower or 'radyator' in stok_lower:
-                        analiz = hesapla_ve_analiz_et(stok_adi, adet)
-                        if analiz and analiz['Etiket']:
-                            for miktar, birim, ad in analiz['Reçete']:
-                                key = f"{ad} ({birim})"
-                                tum_malzemeler[key] = tum_malzemeler.get(key, 0) + (miktar * adet)
-                            
-                            proje_toplam_desi += analiz['Toplam_Desi']
-                            toplam_parca += int(adet)
-                            
-                            for _ in range(int(adet)):
-                                etiket_kopyasi = analiz['Etiket'].copy()
-                                etiket_kopyasi['sira_no'] = global_counter
-                                etiket_listesi.append(etiket_kopyasi)
-                                global_counter += 1
-
-            st.divider()
-            c1, c2 = st.columns(2)
-            c1.metric("📦 Toplam Koli", toplam_parca)
-            c2.metric("⚖️ Toplam Desi", f"{proje_toplam_desi:.2f}")
-            st.divider()
-
-            col_table1, col_table2 = st.columns(2)
-            with col_table1:
-                st.subheader("1. Koli Listesi")
-                if etiket_listesi:
-                    df_paket = pd.DataFrame(etiket_listesi)
-                    st.dataframe(df_paket[['sira_no', 'kisa_isim', 'desi_val', 'boyut_str']].rename(columns={
-                        'sira_no': 'No', 'kisa_isim': 'Urun', 'desi_val': 'Desi', 'boyut_str': 'Olcu'
-                    }), hide_index=True, use_container_width=True)
-            with col_table2:
-                st.subheader("2. Malzeme Cek Listesi")
-                if tum_malzemeler:
-                    malz_items = [{"Malzeme": k, "Adet": int(v) if v%1==0 else v} for k,v in tum_malzemeler.items()]
-                    df_malz = pd.DataFrame(malz_items)
-                    st.dataframe(df_malz, hide_index=True, use_container_width=True)
-
-            st.divider()
-            st.subheader("🖨️ Cikti Al")
-            col_pdf1, col_pdf2 = st.columns(2)
+            header_index = -1
+            for i, row in df_raw.iterrows():
+                if "Stok Adı" in " ".join([str(v) for v in row.values]): header_index = i; break
             
-            pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, etiket_listesi)
-            col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
+            if header_index != -1:
+                new_header = df_raw.iloc[header_index]
+                df = df_raw[header_index + 1:].copy()
+                df.columns = [str(col).strip() for col in new_header]
+                try: df = df[['Stok Adı', 'Miktar']]
+                except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
+                df = df.dropna(subset=['Stok Adı'])
+                
+                tum_malzemeler, etiket_listesi = {}, []
+                proje_toplam_desi, toplam_parca, global_counter = 0, 0, 1
+                
+                for index, row in df.iterrows():
+                    try: adet = float(row['Miktar'])
+                    except: adet = 0
+                    stok_adi = str(row['Stok Adı']); stok_lower = tr_lower(stok_adi)
+                    
+                    if adet > 0:
+                        is_vana_accessory = ('vana' in stok_lower) and ('nirvana' not in stok_lower)
+                        is_other_accessory = any(x in stok_lower for x in ['volan', 'tapa', 'aksesuar', 'set', 'termo', 'köşe'])
+                        
+                        if is_vana_accessory or is_other_accessory:
+                             key = f"{stok_adi} (Adet)"
+                             tum_malzemeler[key] = tum_malzemeler.get(key, 0) + adet
+                        
+                        elif 'radyatör' in stok_lower or 'havlupan' in stok_lower or 'radyator' in stok_lower:
+                            analiz = hesapla_ve_analiz_et(stok_adi, adet)
+                            if analiz and analiz['Etiket']:
+                                for miktar, birim, ad in analiz['Reçete']:
+                                    key = f"{ad} ({birim})"
+                                    tum_malzemeler[key] = tum_malzemeler.get(key, 0) + (miktar * adet)
+                                
+                                proje_toplam_desi += analiz['Toplam_Desi']
+                                toplam_parca += int(adet)
+                                
+                                for _ in range(int(adet)):
+                                    etiket_kopyasi = analiz['Etiket'].copy()
+                                    etiket_kopyasi['sira_no'] = global_counter
+                                    etiket_listesi.append(etiket_kopyasi)
+                                    global_counter += 1
 
-            pdf_production = create_production_pdf(tum_malzemeler, etiket_listesi, musteri_data)
-            col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
-            
+                st.divider()
+                c1, c2 = st.columns(2)
+                c1.metric("📦 Toplam Koli", toplam_parca)
+                c2.metric("⚖️ Toplam Desi", f"{proje_toplam_desi:.2f}")
+                st.divider()
+
+                col_table1, col_table2 = st.columns(2)
+                with col_table1:
+                    st.subheader("1. Koli Listesi")
+                    if etiket_listesi:
+                        df_paket = pd.DataFrame(etiket_listesi)
+                        st.dataframe(df_paket[['sira_no', 'kisa_isim', 'desi_val', 'boyut_str']].rename(columns={
+                            'sira_no': 'No', 'kisa_isim': 'Urun', 'desi_val': 'Desi', 'boyut_str': 'Olcu'
+                        }), hide_index=True, use_container_width=True)
+                with col_table2:
+                    st.subheader("2. Malzeme Cek Listesi")
+                    if tum_malzemeler:
+                        malz_items = [{"Malzeme": k, "Adet": int(v) if v%1==0 else v} for k,v in tum_malzemeler.items()]
+                        df_malz = pd.DataFrame(malz_items)
+                        st.dataframe(df_malz, hide_index=True, use_container_width=True)
+
+                st.divider()
+                st.subheader("🖨️ Cikti Al")
+                col_pdf1, col_pdf2 = st.columns(2)
+                
+                pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, etiket_listesi)
+                col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
+
+                pdf_production = create_production_pdf(tum_malzemeler, etiket_listesi, musteri_data)
+                col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+                
+            else:
+                st.error("Dosyada 'Stok Adı' basligi bulunamadi.")
+        except Exception as e:
+            st.error(f"Hata: {e}")
+
+# --- TAB 2: MANUEL HESAPLAYICI (GÜNCELLENDİ) ---
+with tab_manuel:
+    st.header("🧮 Hızlı Desi Hesaplama Aracı")
+    
+    if 'manuel_liste' not in st.session_state:
+        st.session_state['manuel_liste'] = []
+
+    # Giriş Alanları
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    with col_m1:
+        # Menüde sadece doğru isimler görünsün, yanlış 'livera' görünmesin diye filtreliyoruz
+        display_models = ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera']
+        secilen_model = st.selectbox("Model Seçin", display_models)
+        
+        # --- ETİKET VE TİP BELİRLEME ---
+        model_lower = secilen_model.lower()
+        is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
+        
+        # Etiketleri Dinamik Belirle
+        if is_havlupan:
+            label_1 = "Genişlik (cm)"  # Havlupan: Önce En
+            label_2 = "Yükseklik (cm)" # Havlupan: Sonra Boy
+            val_1_default = 50
+            val_2_default = 70
         else:
-            st.error("Dosyada 'Stok Adı' basligi bulunamadi.")
-    except Exception as e:
-        st.error(f"Hata: {e}")
+            label_1 = "Yükseklik (cm)" # Radyatör: Önce Yükseklik
+            label_2 = "Genişlik (cm)"  # Radyatör: Sonra Boy
+            val_1_default = 60
+            val_2_default = 100
+        
+    with col_m2:
+        val_1 = st.number_input(label_1, min_value=10, value=val_1_default)
+    with col_m3:
+        val_2 = st.number_input(label_2, min_value=10, value=val_2_default)
+    with col_m4:
+        m_adet = st.number_input("Adet", min_value=1, value=1)
+        
+    if st.button("➕ Listeye Ekle", type="primary"):
+        # Hesaplamaya doğru değerleri gönderelim
+        if is_havlupan:
+            # Havlupan ise: Kutu 1=Genişlik, Kutu 2=Yükseklik
+            g_input = val_1
+            y_input = val_2
+        else:
+            # Radyatör ise: Kutu 1=Yükseklik, Kutu 2=Genişlik
+            y_input = val_1
+            g_input = val_2
+            
+        birim_desi, boyut_str = manuel_hesapla(secilen_model, g_input, y_input)
+        toplam_desi = birim_desi * m_adet
+        
+        yeni_kayit = {
+            "Model": secilen_model,
+            "Ölçü (ExB)": f"{g_input} x {y_input}",
+            "Kutulu Ölçü": boyut_str,
+            "Adet": m_adet,
+            "Birim Desi": birim_desi,
+            "Toplam Desi": round(toplam_desi, 2)
+        }
+        st.session_state['manuel_liste'].append(yeni_kayit)
+        st.success("Eklendi!")
+
+    if st.session_state['manuel_liste']:
+        st.divider()
+        df_manuel = pd.DataFrame(st.session_state['manuel_liste'])
+        st.dataframe(df_manuel, use_container_width=True)
+        
+        t_adet = df_manuel['Adet'].sum()
+        t_desi = df_manuel['Toplam Desi'].sum()
+        
+        c_tot1, c_tot2, c_tot3 = st.columns([1,1,2])
+        c_tot1.metric("Toplam Parça", t_adet)
+        c_tot2.metric("Genel Toplam Desi", f"{t_desi:.2f}")
+        
+        if c_tot3.button("🗑️ Listeyi Temizle"):
+            st.session_state['manuel_liste'] = []
+            st.rerun()
