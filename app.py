@@ -37,8 +37,8 @@ ZORUNLU_HAVLUPANLAR = ['hazal', 'lisa', 'lizyantus', 'kumbaros']
 
 # --- AĞIRLIK REFERANSLARI ---
 # Radyatörler: 60cm yükseklikteki 1 dilim ağırlığı
-# Havlupanlar (Lizyantus, Kumbaros vb.): 50cm genişlikteki 1 dilim (yatay boru) ağırlığı
-# Hazal: Borulu olduğu için ayrı hesaplanabilir veya katsayısı farklı olabilir.
+# Havlupanlar (Lizyantus, Kumbaros): 50cm genişlikteki 1 dilim (yatay boru) ağırlığı
+# NOT: Hazal listeden çıkarıldı, ağırlığı 0 hesaplanacak.
 MODEL_AGIRLIKLARI = {
     'nirvana': 1.10,
     'prag': 0.71,
@@ -47,16 +47,14 @@ MODEL_AGIRLIKLARI = {
     'akasya': 0.75,
     'aspar': 1.05,
     'lizyantus': 0.750, # 50cm genişlikteki 1 boru ağırlığı
-    'kumbaros': 0.856,  # 50cm genişlikteki 1 boru ağırlığı
-    'hazal': 0.600      # Hazal borulu olduğu için tahmini bir değer (Düzeltebilirsin)
+    'kumbaros': 0.856   # 50cm genişlikteki 1 boru ağırlığı
 }
 
 # --- HAVLUPAN BORU SAYILARI LİSTESİ ---
-# Buraya senin verdiğin gerçek "Yükseklik: Boru Sayısı" bilgilerini girdim.
+# Hazal borulu olsa da ağırlık verisi olmadığı için buradan da çıkardım/etkisizleştirdim.
 HAVLUPAN_BORU_CETVELI = {
     'lizyantus': {70: 6, 100: 8, 120: 10, 150: 12},
-    'kumbaros': {70: 5, 100: 7, 120: 8, 150: 10},
-    'hazal': {70: 10, 100: 14, 120: 17, 150: 21} # Hazal borulu olduğu için sık boruludur (Örnek)
+    'kumbaros': {70: 5, 100: 7, 120: 8, 150: 10}
 }
 
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
@@ -97,10 +95,12 @@ def get_standart_paket_icerigi(tip, model_adi):
 
 # --- YENİLENEN AĞIRLIK HESAPLAMA ---
 def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
-    if model_key not in MODEL_AGIRLIKLARI: return 0
+    # EĞER MODEL HAZAL İSE VEYA LİSTEDE YOKSA 0 DÖNDÜR
+    if model_key not in MODEL_AGIRLIKLARI: 
+        return 0
     
     # --- RADYATÖR HESABI (Dilim Bazlı - Yükseklik Sabit) ---
-    if model_key not in ['lizyantus', 'kumbaros', 'hazal', 'lisa']:
+    if model_key not in ['lizyantus', 'kumbaros']:
         dilim_match = re.search(r'(\d+)\s*DILIM', tr_upper(stok_adi))
         if dilim_match: dilim_sayisi = int(dilim_match.group(1))
         else:
@@ -113,7 +113,7 @@ def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
         kg_per_dilim = (yukseklik_cm / 60) * MODEL_AGIRLIKLARI[model_key]
         return round(dilim_sayisi * kg_per_dilim, 2)
 
-    # --- HAVLUPAN HESABI (Boru/Yükseklik Bazlı) ---
+    # --- HAVLUPAN HESABI (Boru/Yükseklik Bazlı - Sadece Lizyantus/Kumbaros) ---
     else:
         # 1. Boru Sayısını Bul
         boru_sayisi = 0
@@ -124,14 +124,13 @@ def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
             else:
                 # Listede yoksa orantı kur
                 div = 12.5 if model_key == 'lizyantus' else 15.0
-                if model_key == 'hazal': div = 7.0 # Hazal sık borulu
                 boru_sayisi = round(yukseklik_cm / div)
         else:
-            # Standart Havlupan (Hazal gibi borulu varsayıyoruz)
+            # Standart Havlupan
             boru_sayisi = round(yukseklik_cm / 7.5)
 
         # 2. Ağırlık Hesabı: Boru Sayısı * (Genişlik Oranı) * Birim Ağırlık
-        ref_agirlik = MODEL_AGIRLIKLARI.get(model_key, 0.6) # Bulamazsa 0.6kg al
+        ref_agirlik = MODEL_AGIRLIKLARI.get(model_key, 0)
         genislik_katsayisi = genislik_cm / 50.0
         
         agirlik = boru_sayisi * ref_agirlik * genislik_katsayisi
