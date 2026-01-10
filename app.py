@@ -35,14 +35,18 @@ MODEL_DERINLIKLERI = {
 
 ZORUNLU_HAVLUPANLAR = ['hazal', 'lisa', 'lizyantus', 'kumbaros']
 
-# --- MODEL BAZLI 60 CM REFERANS AĞIRLIKLARI (KG/DİLİM) ---
+# --- MODEL BAZLI REFERANS AĞIRLIKLARI (KG) ---
+# Radyatörler: 60cm yükseklikteki 1 dilim ağırlığı
+# Havlupanlar: 50cm genişlikteki 1 dilim (boru) ağırlığı olarak kabul edildi
 MODEL_AGIRLIKLARI = {
     'nirvana': 1.10,
     'prag': 0.71,
     'livara': 0.81,
     'livera': 0.81,
     'akasya': 0.75,
-    'aspar': 1.05
+    'aspar': 1.05,
+    'lizyantus': 0.750, # 50cm genişlik referans
+    'kumbaros': 0.856   # 50cm genişlik referans
 }
 
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
@@ -111,31 +115,49 @@ def get_standart_paket_icerigi(tip, model_adi):
             (1, "Set", ambalaj_ismi)
         ]
 
-# --- AKILLI DİLİM VE AĞIRLIK HESAPLAMA ---
+# --- AKILLI DİLİM VE AĞIRLIK HESAPLAMA (GÜNCELLENDİ) ---
 def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
     if model_key not in MODEL_AGIRLIKLARI:
         return 0
-        
-    dilim_match = re.search(r'(\d+)\s*DILIM', tr_upper(stok_adi))
     
-    if dilim_match:
-        dilim_sayisi = int(dilim_match.group(1))
-    else:
-        if model_key in ['nirvana', 'prag']:
-            dilim_sayisi = round((genislik_cm + 1) / 8)
-        elif model_key == 'akasya':
-            dilim_sayisi = round((genislik_cm + 3) / 6)
-        elif model_key in ['livara', 'livera']:
-            dilim_sayisi = round((genislik_cm + 0.5) / 6)
-        elif model_key == 'aspar':
-            dilim_sayisi = round((genislik_cm + 1) / 10)
+    # --- RADYATÖR HESABI (Yükseklik Sabit, Genişlik Değişken) ---
+    if model_key not in ['lizyantus', 'kumbaros']:
+        dilim_match = re.search(r'(\d+)\s*DILIM', tr_upper(stok_adi))
+        if dilim_match:
+            dilim_sayisi = int(dilim_match.group(1))
         else:
-            return 0
+            if model_key in ['nirvana', 'prag']: dilim_sayisi = round((genislik_cm + 1) / 8)
+            elif model_key == 'akasya': dilim_sayisi = round((genislik_cm + 3) / 6)
+            elif model_key in ['livara', 'livera']: dilim_sayisi = round((genislik_cm + 0.5) / 6)
+            elif model_key == 'aspar': dilim_sayisi = round((genislik_cm + 1) / 10)
+            else: return 0
+            
+        ref_agirlik_60cm = MODEL_AGIRLIKLARI[model_key]
+        kg_per_dilim = (yukseklik_cm / 60) * ref_agirlik_60cm
+        agirlik = dilim_sayisi * kg_per_dilim
+        return round(agirlik, 2)
+
+    # --- HAVLUPAN HESABI (Genişlik Sabit, Yükseklik Değişken) ---
+    else:
+        # Havlupanlarda genelde yükseklik arttıkça boru sayısı artar.
+        # Basit bir yaklaşımla, yüksekliğe oranla ağırlık hesaplıyoruz.
+        # 50cm genişlik referans alındı.
         
-    ref_agirlik_60cm = MODEL_AGIRLIKLARI[model_key]
-    kg_per_dilim = (yukseklik_cm / 60) * ref_agirlik_60cm
-    agirlik = dilim_sayisi * kg_per_dilim
-    return round(agirlik, 2)
+        ref_agirlik_50cm_en = MODEL_AGIRLIKLARI[model_key]
+        
+        # Genişlik oranlaması (50cm değilse oranla)
+        genislik_katsayisi = genislik_cm / 50.0
+        
+        # Yükseklik arttıkça ağırlık artar (Lineer kabul ediyoruz)
+        # Havlupanlarda dilim sayısı yerine "Metre Tül" mantığına benzer yaklaşıyoruz.
+        # Varsayım: 100cm yükseklikteki havlupanın, 10 dilim borusu varsa ve her biri ref_agirlik ise...
+        # Burada "1 Dilim Ağırlığı" dediğin şeyin, "Boru başına ağırlık" olduğunu varsayıyorum.
+        # Ortalama bir havlupanda her 7-8 cm'de bir boru olduğunu varsayarsak:
+        
+        tahmini_boru_sayisi = yukseklik_cm / 7.5 # Ortalama aralık
+        agirlik = tahmini_boru_sayisi * ref_agirlik_50cm_en * genislik_katsayisi
+        
+        return round(agirlik, 2)
 
 def hesapla_ve_analiz_et(stok_adi, adet):
     if not isinstance(stok_adi, str): return None
@@ -186,6 +208,7 @@ def hesapla_ve_analiz_et(stok_adi, adet):
         
         desi = (kutulu_en * kutulu_boy * kutulu_derinlik) / 3000
         desi_sonuc = round(desi, 2)
+        
         agirlik_sonuc = agirlik_hesapla(stok_adi, genislik, yukseklik, bulunan_model_key)
         
         etiket_verisi = {
@@ -203,8 +226,10 @@ def hesapla_ve_analiz_et(stok_adi, adet):
 
 def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     model_lower = model_secimi.lower()
+    
     is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
     tip = 'HAVLUPAN' if is_havlupan else 'RADYATOR'
+    
     base_derinlik = 4.5
     model_key = "standart"
     
@@ -215,16 +240,20 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
             break
             
     paylar = AYARLAR[tip]
+    
     kutulu_en = genislik + paylar['PAY_GENISLIK']
     kutulu_boy = yukseklik + paylar['PAY_YUKSEKLIK']
     kutulu_derinlik = base_derinlik + paylar['PAY_DERINLIK']
+    
     desi = (kutulu_en * kutulu_boy * kutulu_derinlik) / 3000
+    
+    # Manuelde Ağırlık Hesabı
     birim_kg = agirlik_hesapla("", genislik, yukseklik, model_key)
     
     return round(desi, 2), f"{kutulu_en}x{kutulu_boy}x{kutulu_derinlik}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (ORİJİNAL)
+# PDF FONKSİYONLARI (ORİJİNAL TASARIM)
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO()
@@ -534,7 +563,7 @@ with tab_dosya:
                 c1, c2, c3 = st.columns(3)
                 c1.metric("📦 Toplam Koli", toplam_parca)
                 c2.metric("⚖️ Toplam Desi", f"{proje_toplam_desi:.2f}")
-                c3.metric("🏗️ Toplam Ağırlık (Havlupan Hariç)", f"{proje_toplam_kg:.2f} KG") 
+                c3.metric("🏗️ Toplam Ağırlık (Havlupan Dahil)", f"{proje_toplam_kg:.2f} KG") 
                 st.divider()
 
                 col_table1, col_table2 = st.columns(2)
@@ -574,22 +603,21 @@ with tab_manuel:
     # Giriş Alanları
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
+        # Menüde doğru isimler görünsün
         display_models = ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera']
         secilen_model = st.selectbox("Model Seçin", display_models)
         
-        # --- ETİKET VE TİP BELİRLEME ---
         model_lower = secilen_model.lower()
         is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
         
-        # Etiketleri Dinamik Belirle
         if is_havlupan:
-            label_1 = "Genişlik (cm)"  # Havlupan: Önce En
-            label_2 = "Yükseklik (cm)" # Havlupan: Sonra Boy
+            label_1 = "Genişlik (cm)"  
+            label_2 = "Yükseklik (cm)" 
             val_1_default = 50
             val_2_default = 70
         else:
-            label_1 = "Yükseklik (cm)" # Radyatör: Önce Yükseklik
-            label_2 = "Genişlik (cm)"  # Radyatör: Sonra Boy
+            label_1 = "Yükseklik (cm)" 
+            label_2 = "Genişlik (cm)"  
             val_1_default = 60
             val_2_default = 100
         
@@ -601,7 +629,6 @@ with tab_manuel:
         m_adet = st.number_input("Adet", min_value=1, value=1)
         
     if st.button("➕ Listeye Ekle", type="primary"):
-        # Hesaplamaya doğru değerleri gönderelim
         if is_havlupan:
             g_input = val_1
             y_input = val_2
@@ -632,7 +659,6 @@ with tab_manuel:
         t_adet = df_manuel['Adet'].sum()
         t_desi = df_manuel['Toplam Desi'].sum()
         
-        # KG Toplamı için stringi sayıya çevir
         try:
             t_kg = sum([float(x['Toplam Ağırlık'].replace(' KG','')) for x in st.session_state['manuel_liste']])
         except:
@@ -641,7 +667,7 @@ with tab_manuel:
         c_tot1, c_tot2, c_tot3 = st.columns(3)
         c_tot1.metric("Toplam Parça", t_adet)
         c_tot2.metric("Genel Toplam Desi", f"{t_desi:.2f}")
-        c_tot3.metric("Genel Toplam Ağırlık (Havlupan Hariç)", f"{t_kg:.2f} KG")
+        c_tot3.metric("Genel Toplam Ağırlık (Havlupan Dahil)", f"{t_kg:.2f} KG")
         
         if st.button("🗑️ Listeyi Temizle"):
             st.session_state['manuel_liste'] = []
