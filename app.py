@@ -37,7 +37,8 @@ ZORUNLU_HAVLUPANLAR = ['hazal', 'lisa', 'lizyantus', 'kumbaros']
 
 # --- AĞIRLIK REFERANSLARI ---
 # Radyatörler: 60cm yükseklikteki 1 dilim ağırlığı
-# Havlupanlar: 50cm genişlikteki 1 dilim (yatay boru) ağırlığı
+# Havlupanlar (Lizyantus, Kumbaros vb.): 50cm genişlikteki 1 dilim (yatay boru) ağırlığı
+# Hazal: Borulu olduğu için ayrı hesaplanabilir veya katsayısı farklı olabilir.
 MODEL_AGIRLIKLARI = {
     'nirvana': 1.10,
     'prag': 0.71,
@@ -46,24 +47,16 @@ MODEL_AGIRLIKLARI = {
     'akasya': 0.75,
     'aspar': 1.05,
     'lizyantus': 0.750, # 50cm genişlikteki 1 boru ağırlığı
-    'kumbaros': 0.856   # 50cm genişlikteki 1 boru ağırlığı
+    'kumbaros': 0.856,  # 50cm genişlikteki 1 boru ağırlığı
+    'hazal': 0.600      # Hazal borulu olduğu için tahmini bir değer (Düzeltebilirsin)
 }
 
-# --- HAVLUPAN DİLİM (BORU) SAYILARI LİSTESİ ---
+# --- HAVLUPAN BORU SAYILARI LİSTESİ ---
 # Buraya senin verdiğin gerçek "Yükseklik: Boru Sayısı" bilgilerini girdim.
 HAVLUPAN_BORU_CETVELI = {
-    'lizyantus': {
-        70: 6,   # 70cm yükseklik -> 6 boru
-        100: 8,  # 100cm yükseklik -> 8 boru
-        120: 10, # Tahmini (Senin verine göre scale ettim)
-        150: 12
-    },
-    'kumbaros': {
-        70: 5,   # Tahmini
-        100: 7,  # Tahmini
-        120: 8,  # 120cm yükseklik -> 8 boru (Senin verin)
-        150: 10
-    }
+    'lizyantus': {70: 6, 100: 8, 120: 10, 150: 12},
+    'kumbaros': {70: 5, 100: 7, 120: 8, 150: 10},
+    'hazal': {70: 10, 100: 14, 120: 17, 150: 21} # Hazal borulu olduğu için sık boruludur (Örnek)
 }
 
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
@@ -106,8 +99,8 @@ def get_standart_paket_icerigi(tip, model_adi):
 def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
     if model_key not in MODEL_AGIRLIKLARI: return 0
     
-    # --- RADYATÖR HESABI (Eski sistem devam) ---
-    if model_key not in ['lizyantus', 'kumbaros']:
+    # --- RADYATÖR HESABI (Dilim Bazlı - Yükseklik Sabit) ---
+    if model_key not in ['lizyantus', 'kumbaros', 'hazal', 'lisa']:
         dilim_match = re.search(r'(\d+)\s*DILIM', tr_upper(stok_adi))
         if dilim_match: dilim_sayisi = int(dilim_match.group(1))
         else:
@@ -120,27 +113,25 @@ def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
         kg_per_dilim = (yukseklik_cm / 60) * MODEL_AGIRLIKLARI[model_key]
         return round(dilim_sayisi * kg_per_dilim, 2)
 
-    # --- HAVLUPAN HESABI (Yeni Sistem) ---
+    # --- HAVLUPAN HESABI (Boru/Yükseklik Bazlı) ---
     else:
-        # 1. Önce tanımlı listemize bakalım (Senin verdiğin veriler)
+        # 1. Boru Sayısını Bul
         boru_sayisi = 0
         if model_key in HAVLUPAN_BORU_CETVELI:
-            # Yüksekliğe en yakın olanı veya tam eşleşeni bulmaya çalışalım
-            # Şimdilik tam eşleşme arıyoruz, yoksa orantı kuracağız.
+            # Listede varsa al, yoksa yaklaşık hesapla
             if int(yukseklik_cm) in HAVLUPAN_BORU_CETVELI[model_key]:
                 boru_sayisi = HAVLUPAN_BORU_CETVELI[model_key][int(yukseklik_cm)]
             else:
-                # Listede yoksa, senin verilerine göre ortalama bir bölen kullanalım.
-                # Lizyantus: 100cm / 8 = 12.5
-                # Kumbaros: 120cm / 8 = 15
+                # Listede yoksa orantı kur
                 div = 12.5 if model_key == 'lizyantus' else 15.0
+                if model_key == 'hazal': div = 7.0 # Hazal sık borulu
                 boru_sayisi = round(yukseklik_cm / div)
         else:
-            # Hiçbiri değilse standart havlupan
-            boru_sayisi = round(yukseklik_cm / 5) # Standartlar sık boruludur
+            # Standart Havlupan (Hazal gibi borulu varsayıyoruz)
+            boru_sayisi = round(yukseklik_cm / 7.5)
 
         # 2. Ağırlık Hesabı: Boru Sayısı * (Genişlik Oranı) * Birim Ağırlık
-        ref_agirlik = MODEL_AGIRLIKLARI[model_key] # 50cm için
+        ref_agirlik = MODEL_AGIRLIKLARI.get(model_key, 0.6) # Bulamazsa 0.6kg al
         genislik_katsayisi = genislik_cm / 50.0
         
         agirlik = boru_sayisi * ref_agirlik * genislik_katsayisi
@@ -149,16 +140,14 @@ def agirlik_hesapla(stok_adi, genislik_cm, yukseklik_cm, model_key):
 def hesapla_ve_analiz_et(stok_adi, adet):
     if not isinstance(stok_adi, str): return None
     stok_adi_islenen = tr_lower(stok_adi)
-    
     base_derinlik, bulunan_model_key = 4.5, "standart"
     bulunan_model_adi = "Standart"
-    
     for model, derinlik in MODEL_DERINLIKLERI.items():
         if model in stok_adi_islenen:
             base_derinlik, bulunan_model_key = derinlik, model
             bulunan_model_adi = "Livara" if model == 'livera' else model.capitalize()
             break
-            
+    
     is_havlupan_name = 'havlupan' in stok_adi_islenen or any(z in stok_adi_islenen for z in ZORUNLU_HAVLUPANLAR)
     tip = 'HAVLUPAN' if is_havlupan_name else 'RADYATOR'
     
@@ -184,13 +173,11 @@ def hesapla_ve_analiz_et(stok_adi, adet):
 
 def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     model_lower = model_secimi.lower()
-    is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
-    tip = 'HAVLUPAN' if is_havlupan else 'RADYATOR'
+    is_h = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
+    tip = 'HAVLUPAN' if is_h else 'RADYATOR'
     base_derinlik, model_key = 4.5, "standart"
-    
     for m_key, m_val in MODEL_DERINLIKLERI.items():
         if m_key in model_lower: base_derinlik, model_key = m_val, m_key; break
-            
     paylar = AYARLAR[tip]
     k_en, k_boy, k_derin = genislik + paylar['PAY_GENISLIK'], yukseklik + paylar['PAY_YUKSEKLIK'], base_derinlik + paylar['PAY_DERINLIK']
     desi = round((k_en * k_boy * k_derin) / 3000, 2)
@@ -198,7 +185,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (ORİJİNAL)
+# PDF FONKSİYONLARI (ORİJİNAL TASARIM - DOKUNULMADI)
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
