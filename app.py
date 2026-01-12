@@ -164,7 +164,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI
+# PDF FONKSİYONLARI (RENK DÜZELTMELERİ YAPILDI)
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
@@ -191,10 +191,12 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     summary_data = [[f"TOPLAM PARCA: {toplam_parca}", f"TOPLAM DESI: {proje_toplam_desi:.2f}"]]
     t_sum = Table(summary_data, colWidths=[9.5*cm, 9.5*cm], style=TableStyle([('ALIGN', (0,0), (0,0), 'LEFT'), ('ALIGN', (1,0), (1,0), 'RIGHT'), ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 14), ('TEXTCOLOR', (1,0), (1,0), colors.blue), ('LINEBELOW', (0,0), (-1,-1), 2, colors.black)]))
     elements.append(t_sum); elements.append(Spacer(1, 1*cm))
+    
+    # --- RENK DEĞİŞİKLİĞİ: Arkaplan SİYAH, Yazı BEYAZ ---
     warning_title = Paragraph("<b>DIKKAT KIRILIR !</b>", ParagraphStyle('WT', fontSize=26, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold'))
     warning_text = """SAYIN MUSTERIMIZ,<br/>GELEN KARGONUZUN BULUNDUGU PAKETLERIN SAGLAM VE PAKETLERDE EZIKLIK OLMADIGINI KONTROL EDEREK ALINIZ. EKSIK VEYA HASARLI MALZEME VARSA LUTFEN KARGO GOREVLISINE AYNI GUN TUTANAK TUTTURUNUZ."""
     warning_para = Paragraph(warning_text, ParagraphStyle('warn', alignment=TA_CENTER, textColor=colors.white, fontSize=11, leading=14, fontName='Helvetica-Bold'))
-    t_warn = Table([[warning_title], [warning_para]], colWidths=[19*cm], style=TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.red), ('BOX', (0,0), (-1,-1), 1, colors.black), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('PADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,0), 10)]))
+    t_warn = Table([[warning_title], [warning_para]], colWidths=[19*cm], style=TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.black), ('BOX', (0,0), (-1,-1), 1, colors.black), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('PADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,0), 10)]))
     elements.append(t_warn)
     doc.build(elements); buffer.seek(0); return buffer
 
@@ -210,8 +212,9 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     t_sig = Table(signature_data, colWidths=[8*cm, 2*cm, 8*cm], style=TableStyle([('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
     elements.append(t_sig); elements.append(Spacer(1, 0.5*cm)); elements.append(Paragraph("-" * 120, ParagraphStyle('sep', alignment=TA_CENTER))); elements.append(Paragraph("ASAGIDAKI ETIKETLERI KESIP KOLILERE YAPISTIRINIZ (6x6 cm)", ParagraphStyle('Small', fontSize=8, alignment=TA_CENTER))); elements.append(Spacer(1, 0.5*cm))
     
+    # --- RENK DEĞİŞİKLİĞİ: Numaralar SİYAH ---
     sticker_data, row = [], []
-    style_num = ParagraphStyle('n', parent=styles['Normal'], alignment=TA_RIGHT, fontSize=14, textColor=colors.red, fontName='Helvetica-Bold')
+    style_num = ParagraphStyle('n', parent=styles['Normal'], alignment=TA_RIGHT, fontSize=14, textColor=colors.black, fontName='Helvetica-Bold')
     for p in etiket_listesi:
         isim, boyut, desi, no = tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val']), str(p['sira_no'])
         cust = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'][:25]) if musteri_bilgileri['AD_SOYAD'] else ""
@@ -251,6 +254,7 @@ tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplay
 with tab_dosya:
     uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
 
+    # Session state for data persistence
     if 'ham_veri' not in st.session_state: st.session_state['ham_veri'] = []
     if 'malzeme_listesi' not in st.session_state: st.session_state['malzeme_listesi'] = {}
 
@@ -275,8 +279,8 @@ with tab_dosya:
                     except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
                     df = df.dropna(subset=['Stok Adı'])
                     
-                    st.session_state['ham_veri'] = [] 
-                    st.session_state['malzeme_listesi'] = {} 
+                    st.session_state['ham_veri'] = [] # Reset
+                    st.session_state['malzeme_listesi'] = {} # Reset
                     
                     for index, row in df.iterrows():
                         try: adet = float(row['Miktar'])
@@ -294,10 +298,12 @@ with tab_dosya:
                             elif 'radyatör' in stok_lower or 'havlupan' in stok_lower or 'radyator' in stok_lower:
                                 analiz = hesapla_ve_analiz_et(stok_adi, adet)
                                 if analiz:
+                                    # Malzeme listesi için reçeteyi işle
                                     for miktar, birim, ad in analiz['Reçete']:
                                         key = f"{ad} ({birim})"
                                         st.session_state['malzeme_listesi'][key] = st.session_state['malzeme_listesi'].get(key, 0) + (miktar * adet)
                                     
+                                    # Tablo verisine ekle (Düzenlenecek veri)
                                     st.session_state['ham_veri'].append({
                                         "Ürün": analiz['Etiket']['kisa_isim'],
                                         "Adet": int(adet),
@@ -334,14 +340,12 @@ with tab_dosya:
         c1.metric("📦 Yeni Toplam Koli", int(toplam_parca))
         c2.metric("⚖️ Yeni Toplam Desi", f"{proje_toplam_desi:.2f}")
 
-        # 2. MALZEME LİSTESİ EDİTÖRÜ (DÜZELTİLEN KISIM)
+        # 2. MALZEME LİSTESİ EDİTÖRÜ
         st.divider()
         st.subheader("🛠️ Malzeme Çek Listesi (Düzenlenebilir)")
         
-        # Dictionary'yi DataFrame'e çevir
         malz_df = pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()])
         
-        # Editör olarak göster
         edited_malz_df = st.data_editor(
             malz_df,
             key="malzeme_editor",
@@ -352,7 +356,6 @@ with tab_dosya:
             }
         )
         
-        # Editörden gelen veriyi tekrar dictionary formatına çevir (PDF fonksiyonu için)
         final_malzeme_listesi = dict(zip(edited_malz_df['Malzeme'], edited_malz_df['Adet']))
 
         # PDF İçin Etiket Listesini Yeniden Oluştur (Düzenlenmiş veriden)
@@ -392,7 +395,6 @@ with tab_manuel:
     # Giriş Alanları
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
-        # Menüde doğru isimler görünsün
         display_models = ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera']
         secilen_model = st.selectbox("Model Seçin", display_models)
         
