@@ -124,7 +124,13 @@ def hesapla_ve_analiz_et(stok_adi, adet):
     tip = 'HAVLUPAN' if is_havlupan_name else 'RADYATOR'
     
     reçete = get_standart_paket_icerigi(tip, tr_upper(bulunan_model_adi))
-    paylar = AYARLAR[tip]
+    
+    # --- GÜNCELLEME: PRAG İÇİN ÖZEL AYAR (+3 değil +2) ---
+    paylar = AYARLAR[tip].copy() # Orjinal ayarları bozmamak için kopyala
+    if bulunan_model_key == 'prag':
+        paylar['PAY_DERINLIK'] = 2.0
+    # -----------------------------------------------------
+
     boyutlar = re.search(r'(\d+)\s*[/xX]\s*(\d+)', stok_adi)
     
     if boyutlar:
@@ -157,7 +163,13 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     base_derinlik, model_key = 4.5, "standart"
     for m_key, m_val in MODEL_DERINLIKLERI.items():
         if m_key in model_lower: base_derinlik, model_key = m_val, m_key; break
-    paylar = AYARLAR[tip]
+    
+    # --- GÜNCELLEME: MANUEL HESAPLAMA İÇİN PRAG ÖZEL AYARI ---
+    paylar = AYARLAR[tip].copy()
+    if 'prag' in model_lower:
+        paylar['PAY_DERINLIK'] = 2.0
+    # ---------------------------------------------------------
+    
     k_en, k_boy, k_derin = genislik + paylar['PAY_GENISLIK'], yukseklik + paylar['PAY_YUKSEKLIK'], base_derinlik + paylar['PAY_DERINLIK']
     desi = round((k_en * k_boy * k_derin) / 3000, 2)
     birim_kg = agirlik_hesapla("", genislik, yukseklik, model_key)
