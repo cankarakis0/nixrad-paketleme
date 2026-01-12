@@ -251,7 +251,6 @@ tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplay
 with tab_dosya:
     uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
 
-    # Session state for data persistence
     if 'ham_veri' not in st.session_state: st.session_state['ham_veri'] = []
     if 'malzeme_listesi' not in st.session_state: st.session_state['malzeme_listesi'] = {}
 
@@ -276,8 +275,8 @@ with tab_dosya:
                     except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
                     df = df.dropna(subset=['Stok Adı'])
                     
-                    st.session_state['ham_veri'] = [] # Reset
-                    st.session_state['malzeme_listesi'] = {} # Reset
+                    st.session_state['ham_veri'] = [] 
+                    st.session_state['malzeme_listesi'] = {} 
                     
                     for index, row in df.iterrows():
                         try: adet = float(row['Miktar'])
@@ -295,12 +294,10 @@ with tab_dosya:
                             elif 'radyatör' in stok_lower or 'havlupan' in stok_lower or 'radyator' in stok_lower:
                                 analiz = hesapla_ve_analiz_et(stok_adi, adet)
                                 if analiz:
-                                    # Malzeme listesi için reçeteyi işle
                                     for miktar, birim, ad in analiz['Reçete']:
                                         key = f"{ad} ({birim})"
                                         st.session_state['malzeme_listesi'][key] = st.session_state['malzeme_listesi'].get(key, 0) + (miktar * adet)
                                     
-                                    # Tablo verisine ekle (Düzenlenecek veri)
                                     st.session_state['ham_veri'].append({
                                         "Ürün": analiz['Etiket']['kisa_isim'],
                                         "Adet": int(adet),
@@ -318,7 +315,7 @@ with tab_dosya:
         st.divider()
         st.info("📝 Aşağıdaki tablodan Ürün Adı, Adet, Ölçü ve Desi bilgilerini PDF oluşturmadan önce düzenleyebilirsiniz.")
         
-        # Data Editor
+        # 1. ÜRÜN LİSTESİ EDİTÖRÜ
         edited_df = st.data_editor(
             pd.DataFrame(st.session_state['ham_veri']),
             num_rows="dynamic",
@@ -330,7 +327,6 @@ with tab_dosya:
             }
         )
 
-        # Düzenlenmiş veriye göre toplamları yeniden hesapla
         toplam_parca = edited_df["Adet"].sum()
         proje_toplam_desi = (edited_df["Birim Desi"] * edited_df["Adet"]).sum()
         
@@ -338,14 +334,26 @@ with tab_dosya:
         c1.metric("📦 Yeni Toplam Koli", int(toplam_parca))
         c2.metric("⚖️ Yeni Toplam Desi", f"{proje_toplam_desi:.2f}")
 
-        # --- EKLENEN KISIM: MALZEME ÇEK LİSTESİ ---
+        # 2. MALZEME LİSTESİ EDİTÖRÜ (DÜZELTİLEN KISIM)
         st.divider()
-        st.subheader("🛠️ Malzeme Çek Listesi")
-        if st.session_state['malzeme_listesi']:
-            malz_items = [{"Malzeme": k, "Adet": int(v) if v%1==0 else v} for k,v in st.session_state['malzeme_listesi'].items()]
-            df_malz = pd.DataFrame(malz_items)
-            st.dataframe(df_malz, hide_index=True, use_container_width=True)
-        # ------------------------------------------
+        st.subheader("🛠️ Malzeme Çek Listesi (Düzenlenebilir)")
+        
+        # Dictionary'yi DataFrame'e çevir
+        malz_df = pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()])
+        
+        # Editör olarak göster
+        edited_malz_df = st.data_editor(
+            malz_df,
+            key="malzeme_editor",
+            num_rows="dynamic",
+            use_container_width=True,
+            column_config={
+                "Adet": st.column_config.NumberColumn(format="%.1f")
+            }
+        )
+        
+        # Editörden gelen veriyi tekrar dictionary formatına çevir (PDF fonksiyonu için)
+        final_malzeme_listesi = dict(zip(edited_malz_df['Malzeme'], edited_malz_df['Adet']))
 
         # PDF İçin Etiket Listesini Yeniden Oluştur (Düzenlenmiş veriden)
         final_etiket_listesi = []
@@ -366,12 +374,12 @@ with tab_dosya:
         st.subheader("🖨️ Düzenlenmiş Çıktı Al")
         col_pdf1, col_pdf2 = st.columns(2)
         
-        # Kargo Fişi
+        # Kargo Fişi (Düzenlenmiş listeden)
         pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, final_etiket_listesi)
         col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
 
-        # Üretim Emri
-        pdf_production = create_production_pdf(st.session_state['malzeme_listesi'], final_etiket_listesi, musteri_data)
+        # Üretim Emri (Düzenlenmiş Malzeme Listesi ile)
+        pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 # --- TAB 2: MANUEL HESAPLAYICI ---
