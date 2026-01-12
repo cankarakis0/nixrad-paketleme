@@ -164,7 +164,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (GÜNCELLENDİ: Düzenlenmiş veriyi alacak şekilde)
+# PDF FONKSİYONLARI
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
@@ -184,7 +184,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     elements.append(t_alici); elements.append(Spacer(1, 0.5*cm))
     elements.append(Paragraph("<b>PAKET ICERIK OZETI:</b>", ParagraphStyle('b', fontSize=10, fontName='Helvetica-Bold'))); elements.append(Spacer(1, 0.2*cm))
     
-    # --- BURADA ETIKET LISTESINI KULLANIYORUZ ---
     pkt_data = [['Koli No', 'Urun Adi', 'Olcu', 'Desi']] + [[f"#{p['sira_no']}", tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val'])] for i, p in enumerate(etiket_listesi) if i < 15]
     
     t_pkt = Table(pkt_data, colWidths=[2*cm, 11*cm, 4*cm, 2*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.grey), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('FONTSIZE', (0,0), (-1,-1), 9)]))
@@ -211,7 +210,6 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     t_sig = Table(signature_data, colWidths=[8*cm, 2*cm, 8*cm], style=TableStyle([('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
     elements.append(t_sig); elements.append(Spacer(1, 0.5*cm)); elements.append(Paragraph("-" * 120, ParagraphStyle('sep', alignment=TA_CENTER))); elements.append(Paragraph("ASAGIDAKI ETIKETLERI KESIP KOLILERE YAPISTIRINIZ (6x6 cm)", ParagraphStyle('Small', fontSize=8, alignment=TA_CENTER))); elements.append(Spacer(1, 0.5*cm))
     
-    # --- ETIKETLER DUZENLENMIS LISTEDEN GELECEK ---
     sticker_data, row = [], []
     style_num = ParagraphStyle('n', parent=styles['Normal'], alignment=TA_RIGHT, fontSize=14, textColor=colors.red, fontName='Helvetica-Bold')
     for p in etiket_listesi:
@@ -320,7 +318,7 @@ with tab_dosya:
         st.divider()
         st.info("📝 Aşağıdaki tablodan Ürün Adı, Adet, Ölçü ve Desi bilgilerini PDF oluşturmadan önce düzenleyebilirsiniz.")
         
-        # Data Editor - Kullanıcının değiştirmesine izin ver
+        # Data Editor
         edited_df = st.data_editor(
             pd.DataFrame(st.session_state['ham_veri']),
             num_rows="dynamic",
@@ -339,6 +337,15 @@ with tab_dosya:
         c1, c2 = st.columns(2)
         c1.metric("📦 Yeni Toplam Koli", int(toplam_parca))
         c2.metric("⚖️ Yeni Toplam Desi", f"{proje_toplam_desi:.2f}")
+
+        # --- EKLENEN KISIM: MALZEME ÇEK LİSTESİ ---
+        st.divider()
+        st.subheader("🛠️ Malzeme Çek Listesi")
+        if st.session_state['malzeme_listesi']:
+            malz_items = [{"Malzeme": k, "Adet": int(v) if v%1==0 else v} for k,v in st.session_state['malzeme_listesi'].items()]
+            df_malz = pd.DataFrame(malz_items)
+            st.dataframe(df_malz, hide_index=True, use_container_width=True)
+        # ------------------------------------------
 
         # PDF İçin Etiket Listesini Yeniden Oluştur (Düzenlenmiş veriden)
         final_etiket_listesi = []
@@ -359,11 +366,11 @@ with tab_dosya:
         st.subheader("🖨️ Düzenlenmiş Çıktı Al")
         col_pdf1, col_pdf2 = st.columns(2)
         
-        # Kargo Fişi (Düzenlenmiş listeden)
+        # Kargo Fişi
         pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, final_etiket_listesi)
         col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
 
-        # Üretim Emri (Malzemeler orijinal, Etiketler düzenlenmiş)
+        # Üretim Emri
         pdf_production = create_production_pdf(st.session_state['malzeme_listesi'], final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
