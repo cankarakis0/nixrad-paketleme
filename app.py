@@ -176,7 +176,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (RENK VE FONT DÜZELTMELERİ YAPILDI)
+# PDF FONKSİYONLARI
 # =============================================================================
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
@@ -204,7 +204,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     t_sum = Table(summary_data, colWidths=[9.5*cm, 9.5*cm], style=TableStyle([('ALIGN', (0,0), (0,0), 'LEFT'), ('ALIGN', (1,0), (1,0), 'RIGHT'), ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 14), ('TEXTCOLOR', (1,0), (1,0), colors.blue), ('LINEBELOW', (0,0), (-1,-1), 2, colors.black)]))
     elements.append(t_sum); elements.append(Spacer(1, 1*cm))
     
-    # --- RENK DEĞİŞİKLİĞİ: Arkaplan SİYAH, Yazı BEYAZ ---
     warning_title = Paragraph("<b>DIKKAT KIRILIR !</b>", ParagraphStyle('WT', fontSize=26, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold'))
     warning_text = """SAYIN MUSTERIMIZ,<br/>GELEN KARGONUZUN BULUNDUGU PAKETLERIN SAGLAM VE PAKETLERDE EZIKLIK OLMADIGINI KONTROL EDEREK ALINIZ. EKSIK VEYA HASARLI MALZEME VARSA LUTFEN KARGO GOREVLISINE AYNI GUN TUTANAK TUTTURUNUZ."""
     warning_para = Paragraph(warning_text, ParagraphStyle('warn', alignment=TA_CENTER, textColor=colors.white, fontSize=11, leading=14, fontName='Helvetica-Bold'))
@@ -224,7 +223,6 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     t_sig = Table(signature_data, colWidths=[8*cm, 2*cm, 8*cm], style=TableStyle([('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
     elements.append(t_sig); elements.append(Spacer(1, 0.5*cm)); elements.append(Paragraph("-" * 120, ParagraphStyle('sep', alignment=TA_CENTER))); elements.append(Paragraph("ASAGIDAKI ETIKETLERI KESIP KOLILERE YAPISTIRINIZ (6x6 cm)", ParagraphStyle('Small', fontSize=8, alignment=TA_CENTER))); elements.append(Spacer(1, 0.5*cm))
     
-    # --- RENK VE FONT DEĞİŞİKLİĞİ: Numaralar SİYAH, Müşteri Adı KALIN ve BÜYÜK ---
     sticker_data, row = [], []
     style_num = ParagraphStyle('n', parent=styles['Normal'], alignment=TA_RIGHT, fontSize=14, textColor=colors.black, fontName='Helvetica-Bold')
     style_cust = ParagraphStyle('c_bold', alignment=TA_CENTER, fontSize=10, fontName='Helvetica-Bold', textColor=colors.black)
@@ -330,12 +328,16 @@ with tab_dosya:
             except Exception as e:
                 st.error(f"Hata: {e}")
 
-    # DÜZENLEME EKRANI
+    # DÜZENLEME EKRANI (BURASI DEĞİŞTİ - ÖZET EN ÜSTE ALINDI)
     if st.session_state['ham_veri']:
         st.divider()
-        st.info("📝 Aşağıdaki tablodan Ürün Adı, Adet, Ölçü ve Desi bilgilerini PDF oluşturmadan önce düzenleyebilirsiniz.")
         
-        # 1. ÜRÜN LİSTESİ EDİTÖRÜ
+        # 1. ADIM: ÖZET İÇİN YER AYIRIYORUZ (EN ÜSTE)
+        ozet_alani = st.container()
+
+        st.info("📝 Aşağıdaki tablodan Ürün Adı, Adet, Ölçü ve Desi bilgilerini düzenleyebilirsiniz.")
+        
+        # 2. ADIM: TABLOYU ÇİZİYORUZ VE VERİYİ ALIYORUZ
         edited_df = st.data_editor(
             pd.DataFrame(st.session_state['ham_veri']),
             num_rows="dynamic",
@@ -347,26 +349,25 @@ with tab_dosya:
             }
         )
 
-        # -----------------------------------------------------
-        # BURASI GÜNCELLENDİ (AĞIRLIK VE KOPYALAMA METNİ)
-        # -----------------------------------------------------
+        # 3. ADIM: HESAPLAMALARI YAPIYORUZ
         toplam_parca = edited_df["Adet"].sum()
         proje_toplam_desi = (edited_df["Birim Desi"] * edited_df["Adet"]).sum()
         proje_toplam_agirlik = edited_df["Toplam Ağırlık"].sum()
-        
-        c1, c2, c3 = st.columns(3)
-        c1.metric("📦 Yeni Toplam Koli", int(toplam_parca))
-        c2.metric("📐 Yeni Toplam Desi", f"{proje_toplam_desi:.2f}")
-        c3.metric("⚖️ Yeni Toplam Ağırlık", f"{proje_toplam_agirlik:.1f} KG")
 
-        # Kopyalanacak metin
-        kopyalanacak_metin = f"toplam desi {proje_toplam_desi:.2f}  toplam ağırlık {proje_toplam_agirlik:.1f}"
-        st.info("👇 Kopyalamak için aşağıdaki metni kullanabilirsin:")
-        st.code(kopyalanacak_metin, language="text")
-        # -----------------------------------------------------
+        # 4. ADIM: AYIRDIĞIMIZ ÜST ALANA SONUÇLARI YAZDIRIYORUZ
+        with ozet_alani:
+            st.subheader("📊 Proje Özeti")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("📦 Toplam Koli", int(toplam_parca))
+            c2.metric("📐 Toplam Desi", f"{proje_toplam_desi:.2f}")
+            c3.metric("⚖️ Toplam Ağırlık", f"{proje_toplam_agirlik:.1f} KG")
+            
+            # Kopyalama Alanı
+            kopyalanacak_metin = f"toplam desi {proje_toplam_desi:.2f}  toplam ağırlık {proje_toplam_agirlik:.1f}"
+            st.code(kopyalanacak_metin, language="text")
+            st.divider() # Görsel ayırıcı
 
-        # 2. MALZEME LİSTESİ EDİTÖRÜ
-        st.divider()
+        # 5. ADIM: MALZEME LİSTESİ VE DİĞERLERİ
         st.subheader("🛠️ Malzeme Çek Listesi (Düzenlenebilir)")
         
         malz_df = pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()])
