@@ -347,21 +347,23 @@ with tab_dosya:
             }
         )
 
-        # HESAPLAMALAR VE METRİKLER (GÜNCELLENEN KISIM)
+        # -----------------------------------------------------
+        # BURASI GÜNCELLENDİ (AĞIRLIK VE KOPYALAMA METNİ)
+        # -----------------------------------------------------
         toplam_parca = edited_df["Adet"].sum()
         proje_toplam_desi = (edited_df["Birim Desi"] * edited_df["Adet"]).sum()
         proje_toplam_agirlik = edited_df["Toplam Ağırlık"].sum()
         
-        # 3 KOLONLU GÖSTERİM (Yeni)
         c1, c2, c3 = st.columns(3)
-        c1.metric("📦 Toplam Koli", int(toplam_parca))
-        c2.metric("⚖️ Toplam Desi", f"{proje_toplam_desi:.2f}")
-        c3.metric("🏋️ Toplam Ağırlık", f"{proje_toplam_agirlik:.2f} KG")
+        c1.metric("📦 Yeni Toplam Koli", int(toplam_parca))
+        c2.metric("📐 Yeni Toplam Desi", f"{proje_toplam_desi:.2f}")
+        c3.metric("⚖️ Yeni Toplam Ağırlık", f"{proje_toplam_agirlik:.1f} KG")
 
-        # KOPYALANABİLİR ALAN (Yeni)
-        # Sağ üst köşesinde otomatik copy ikonu çıkar.
-        kopyalanacak_metin = f"TOPLAM DESİ: {proje_toplam_desi:.2f}      TOPLAM AĞIRLIK: {proje_toplam_agirlik:.2f}"
+        # Kopyalanacak metin
+        kopyalanacak_metin = f"toplam desi {proje_toplam_desi:.2f}  toplam ağırlık {proje_toplam_agirlik:.1f}"
+        st.info("👇 Kopyalamak için aşağıdaki metni kullanabilirsin:")
         st.code(kopyalanacak_metin, language="text")
+        # -----------------------------------------------------
 
         # 2. MALZEME LİSTESİ EDİTÖRÜ
         st.divider()
