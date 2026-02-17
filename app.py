@@ -171,7 +171,7 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri):
     style_cust = ParagraphStyle('cst', fontSize=7, alignment=TA_CENTER)
     for p in etiket_listesi:
         no, isim, boyut, desi = str(p['sira_no']), tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val'])
-        cust = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'][:22])
+        cust = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'][:22] if musteri_bilgileri['AD_SOYAD'] else "")
         content = [[Paragraph(f"#{no}", style_no)], [Paragraph(f"<b>{isim}</b>", style_model)], [Paragraph(f"{boyut}", style_dim)], [Paragraph(f"Desi: {desi} | {cust}", style_cust)]]
         t = Table(content, colWidths=[58*mm], rowHeights=[4*mm, 10*mm, 6*mm, 6*mm])
         t.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('LEFTPADDING', (0,0), (-1,-1), 0), ('RIGHTPADDING', (0,0), (-1,-1), 0), ('BOTTOMPADDING', (0,0), (-1,-1), 0), ('TOPPADDING', (0,0), (-1,-1), 0)]))
@@ -214,7 +214,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     elements.append(t); elements.append(Spacer(1, 1*cm))
     sticker_data, row, styles = [], [], getSampleStyleSheet()
     for p in etiket_listesi:
-        isim, boyut, desi, no, cust = tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val']), str(p['sira_no']), tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'][:25] or "")
+        isim, boyut, desi, no, cust = tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val']), str(p['sira_no']), tr_clean_for_pdf((musteri_bilgileri['AD_SOYAD'] or "")[:25])
         content = [[Paragraph(f"<b>#{no}</b>", ParagraphStyle('n', alignment=TA_RIGHT, fontSize=14, fontName='Helvetica-Bold'))], [Paragraph(f"<b>{isim}</b>", ParagraphStyle('C', alignment=TA_CENTER, fontSize=9))], [Paragraph(f"{boyut}", ParagraphStyle('C', alignment=TA_CENTER, fontSize=8))], [Spacer(1, 0.2*cm)], [Paragraph(f"<b>Desi: {desi}</b>", ParagraphStyle('L', alignment=TA_LEFT, fontSize=11))], [Paragraph(f"<b>{cust}</b>", ParagraphStyle('cb', alignment=TA_CENTER, fontSize=10, fontName='Helvetica-Bold'))]]
         box = Table(content, colWidths=[5.8*cm], rowHeights=[0.8*cm, 1.2*cm, 0.5*cm, 0.5*cm, 0.8*cm, 0.5*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
         row.append(box)
@@ -253,22 +253,31 @@ with tab_dosya:
                 new_h = df_raw.iloc[h_idx]
                 df = df_raw[h_idx + 1:].copy()
                 df.columns = [str(col).strip() for col in new_h]
-                df = df[['Stok Adı', 'Miktar']].dropna(subset=['Stok Adı'])
-                st.session_state['ham_veri'], st.session_state['malzeme_listesi'] = [], {}
-                for _, row in df.iterrows():
-                    adet, stok_adi = float(row['Miktar']), str(row['Stok Adı'])
-                    stok_l = tr_lower(stok_adi)
-                    if adet > 0:
-                        if ('vana' in stok_l and 'nirvana' not in stok_l) or any(x in stok_l for x in ['volan', 'tapa', 'aksesuar', 'set']):
-                            k = f"{stok_adi} (Adet)"
-                            st.session_state['malzeme_listesi'][k] = st.session_state['malzeme_listesi'].get(k, 0) + adet
-                        elif any(x in stok_l for x in ['radyatör', 'havlupan', 'radyator']):
-                            analiz = hesapla_ve_analiz_et(stok_adi, adet)
-                            if analiz:
-                                for m, b, a in analiz['Reçete']:
-                                    k = f"{a} ({b})"
-                                    st.session_state['malzeme_listesi'][k] = st.session_state['malzeme_listesi'].get(k, 0) + (m * adet)
-                                st.session_state['ham_veri'].append({"Ürün": analiz['Etiket']['kisa_isim'], "Adet": int(adet), "Ölçü": analiz['Etiket']['boyut_str'], "Birim Desi": analiz['Etiket']['desi_val'], "Toplam Ağırlık": analiz['Toplam_Agirlik_Gosterim']})
+                
+                # AKILLI SÜTUN SEÇİMİ
+                stok_col = "Stok Adı"
+                miktar_col = next((c for c in df.columns if any(x in c.lower() for x in ["miktar", "adet"])), None)
+                
+                if miktar_col and stok_col in df.columns:
+                    df = df[[stok_col, miktar_col]].dropna(subset=[stok_col])
+                    st.session_state['ham_veri'], st.session_state['malzeme_listesi'] = [], {}
+                    for _, row in df.iterrows():
+                        try: adet = float(str(row[miktar_col]).replace(',', '.'))
+                        except: adet = 0
+                        stok_adi = str(row[stok_col])
+                        stok_l = tr_lower(stok_adi)
+                        if adet > 0:
+                            if ('vana' in stok_l and 'nirvana' not in stok_l) or any(x in stok_l for x in ['volan', 'tapa', 'aksesuar', 'set']):
+                                k = f"{stok_adi} (Adet)"
+                                st.session_state['malzeme_listesi'][k] = st.session_state['malzeme_listesi'].get(k, 0) + adet
+                            elif any(x in stok_l for x in ['radyatör', 'havlupan', 'radyator']):
+                                analiz = hesapla_ve_analiz_et(stok_adi, adet)
+                                if analiz:
+                                    for m, b, a in analiz['Reçete']:
+                                        k = f"{a} ({b})"
+                                        st.session_state['malzeme_listesi'][k] = st.session_state['malzeme_listesi'].get(k, 0) + (m * adet)
+                                    st.session_state['ham_veri'].append({"Ürün": analiz['Etiket']['kisa_isim'], "Adet": int(adet), "Ölçü": analiz['Etiket']['boyut_str'], "Birim Desi": analiz['Etiket']['desi_val'], "Toplam Ağırlık": analiz['Toplam_Agirlik_Gosterim']})
+                else: st.error("Miktar sütunu bulunamadı.")
         except Exception as e: st.error(f"Hata: {e}")
 
     if st.session_state['ham_veri']:
@@ -295,7 +304,6 @@ with tab_dosya:
         col_p1, col_p2, col_p3 = st.columns(3)
         col_p1.download_button("📄 1. KARGO FISI (A4)", create_cargo_pdf(p_desi, toplam_parca, musteri_data, final_etiket), "Kargo_Fisi.pdf", "application/pdf", use_container_width=True)
         col_p2.download_button("🏭 2. URETIM & ETIKET (A4)", create_production_pdf(final_malz, final_etiket, musteri_data), "Uretim_ve_Etiketler.pdf", "application/pdf", use_container_width=True)
-        # YENI TERMAL ETIKET BUTONU
         col_p3.download_button("🏷️ 3. TERMAL ETIKET (3x6)", create_thermal_labels_3x6(final_etiket, musteri_data), "Termal_Etiketler.pdf", "application/pdf", use_container_width=True)
 
 with tab_manuel:
@@ -319,7 +327,6 @@ with tab_manuel:
         t_parca, t_desi = df_m['Adet'].sum(), df_m['Toplam Desi'].sum()
         st.metric("Genel Toplam Desi", f"{t_desi:.2f}")
         
-        # Manuel liste için de etiketleri hazırla
         m_etiket, c = [], 1
         for _, r in df_m.iterrows():
             for _ in range(int(r['Adet'])):
