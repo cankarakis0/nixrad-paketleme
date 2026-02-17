@@ -8,6 +8,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfgen import canvas
 
 # Matplotlib Backend Fix
 plt_backend = 'Agg'
@@ -53,7 +54,6 @@ RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
 
 def tr_clean_for_pdf(text):
     if not isinstance(text, str): return str(text)
-    text = text.replace('\n', '<br/>')
     mapping = {'ğ': 'g', 'Ğ': 'G', 'ş': 's', 'Ş': 'S', 'ı': 'i', 'İ': 'I', 'ç': 'c', 'Ç': 'C', 'ö': 'o', 'Ö': 'O', 'ü': 'u', 'Ü': 'U'}
     for k, v in mapping.items(): text = text.replace(k, v)
     return text
@@ -72,7 +72,7 @@ def isim_kisalt(stok_adi):
     renk = ""
     for r in RENKLER: 
         if r in stok_upper: renk = r; break
-    return tr_clean_for_pdf(f"{model_adi} {boyut} {renk}".strip())
+    return f"{model_adi} {boyut} {renk}".strip()
 
 def get_standart_paket_icerigi(tip, model_adi):
     amb = "GENEL AMBALAJLAMA (Karton+ balon + Strec)"
@@ -156,53 +156,42 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI
+# PDF FONKSİYONLARI (Canvas ile kesin çözüm)
 # =============================================================================
 
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri):
     buffer = io.BytesIO()
-    # 6 cm genişlik, 3 cm yükseklik (Landscape görünüm)
-    label_size = (60*mm, 30*mm) 
-    # Kenar boşluklarını sıfıra yaklaştırıyoruz (0.5mm)
-    doc = SimpleDocTemplate(buffer, pagesize=label_size, rightMargin=0.5*mm, leftMargin=0.5*mm, topMargin=0.5*mm, bottomMargin=0.5*mm)
-    elements = []
-    styles = getSampleStyleSheet()
-    
-    # Mikro ayarlar (Leading ve FontSize sığma için kritik)
-    style_no = ParagraphStyle('no', fontSize=7, fontName='Helvetica-Bold', alignment=TA_RIGHT, leading=7)
-    style_model = ParagraphStyle('mod', fontSize=8, fontName='Helvetica-Bold', alignment=TA_CENTER, leading=9)
-    style_dim = ParagraphStyle('dim', fontSize=7, alignment=TA_CENTER, leading=8)
-    style_footer = ParagraphStyle('ft', fontSize=7, alignment=TA_CENTER, leading=8)
+    # 60mm Genişlik x 30mm Yükseklik
+    width, height = 60*mm, 30*mm
+    c = canvas.Canvas(buffer, pagesize=(width, height))
 
     for p in etiket_listesi:
-        no = str(p['sira_no'])
+        no = f"#{p['sira_no']}"
         isim = tr_clean_for_pdf(p['kisa_isim'])
         boyut = p['boyut_str']
-        desi = str(p['desi_val'])
+        desi = f"Desi: {p['desi_val']}"
         cust = tr_clean_for_pdf((musteri_bilgileri['AD_SOYAD'] or "")[:20])
 
-        # Tüm içeriği tek bir tablo hücresine koyuyoruz ki bölünmesin
-        # rowHeights toplamı 29mm (30mm'den az olmalı)
-        content = [
-            [Paragraph(f"#{no}", style_no)],
-            [Paragraph(f"<b>{isim}</b>", style_model)],
-            [Paragraph(f"{boyut}", style_dim)],
-            [Paragraph(f"Desi: {desi} | {cust}", style_footer)]
-        ]
-        
-        t = Table(content, colWidths=[59*mm], rowHeights=[3*mm, 10*mm, 8*mm, 8*mm])
-        t.setStyle(TableStyle([
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('LEFTPADDING', (0,0), (-1,-1), 1*mm),
-            ('RIGHTPADDING', (0,0), (-1,-1), 1*mm),
-            ('TOPPADDING', (0,0), (-1,-1), 0),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-        ]))
-        
-        elements.append(t)
-        elements.append(PageBreak())
+        # 1. Koli No (Sağ Üst)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawRightString(width - 2*mm, height - 5*mm, no)
 
-    doc.build(elements)
+        # 2. Ürün İsmi (Orta)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(width / 2.0, height - 12*mm, isim)
+
+        # 3. Ölçü (Alt Orta)
+        c.setFont("Helvetica", 8)
+        c.drawCentredString(width / 2.0, height - 18*mm, boyut)
+
+        # 4. Alt Bilgi (Desi + Müşteri)
+        c.setFont("Helvetica-Bold", 7)
+        footer_text = f"{desi} | {cust}"
+        c.drawCentredString(width / 2.0, 5*mm, footer_text)
+
+        c.showPage() # Yeni etikete geç (Yazıcı için bu sayfa sonu demek)
+
+    c.save()
     buffer.seek(0)
     return buffer
 
@@ -257,7 +246,6 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
 # =============================================================================
 
 st.markdown("""# 📦 NIXRAD Operasyon Paneli \n ### by [NETMAKER](https://netmaker.com.tr/)""", unsafe_allow_html=True)
-
 st.sidebar.header("Musteri Bilgileri")
 ad_soyad = st.sidebar.text_input("Adi Soyadi / Firma Adi")
 telefon = st.sidebar.text_input("Telefon Numarasi")
@@ -289,8 +277,7 @@ with tab_dosya:
                 for _, row in df.iterrows():
                     try: adet = float(row['Miktar'])
                     except: adet = 0
-                    stok_adi = str(row['Stok Adı'])
-                    stok_l = tr_lower(stok_adi)
+                    stok_adi = str(row['Stok Adı']); stok_l = tr_lower(stok_adi)
                     if adet > 0:
                         if ('vana' in stok_l and 'nirvana' not in stok_l) or any(x in stok_l for x in ['volan', 'tapa', 'aksesuar', 'set']):
                             k = f"{stok_adi} (Adet)"
@@ -305,16 +292,13 @@ with tab_dosya:
         except Exception as e: st.error(f"Hata: {e}")
 
     if st.session_state['ham_veri']:
-        st.divider()
         ozet_alani = st.container()
         edited_df = st.data_editor(pd.DataFrame(st.session_state['ham_veri']), num_rows="dynamic", use_container_width=True)
         toplam_parca, p_desi, p_kg = edited_df["Adet"].sum(), (edited_df["Birim Desi"] * edited_df["Adet"]).sum(), edited_df["Toplam Ağırlık"].sum()
         with ozet_alani:
             st.subheader("📊 Proje Özeti")
             c1, c2, c3 = st.columns(3)
-            c1.metric("📦 Toplam Koli", int(toplam_parca))
-            c2.metric("📐 Toplam Desi", f"{p_desi:.2f}")
-            c3.metric("⚖️ Toplam Ağırlık", f"{p_kg:.1f} KG")
+            c1.metric("📦 Toplam Koli", int(toplam_parca)); c2.metric("📐 Toplam Desi", f"{p_desi:.2f}"); c3.metric("⚖️ Toplam Ağırlık", f"{p_kg:.1f} KG")
             st.code(f"toplam desi {p_desi:.2f}  toplam ağırlık {p_kg:.1f}", language="text")
         
         edited_malz_df = st.data_editor(pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()]), num_rows="dynamic", use_container_width=True)
@@ -326,7 +310,6 @@ with tab_dosya:
                 counter += 1
 
         st.divider()
-        st.subheader("🖨️ Düzenlenmiş Çıktı Al")
         col_p1, col_p2, col_p3 = st.columns(3)
         col_p1.download_button("📄 1. KARGO FISI (A4)", create_cargo_pdf(p_desi, toplam_parca, musteri_data, final_etiket), "Kargo_Fisi.pdf", "application/pdf", use_container_width=True)
         col_p2.download_button("🏭 2. URETIM & ETIKET (A4)", create_production_pdf(final_malz, final_etiket, musteri_data), "Uretim_ve_Etiketler.pdf", "application/pdf", use_container_width=True)
@@ -339,10 +322,8 @@ with tab_manuel:
     with cm1:
         secilen_model = st.selectbox("Model Seçin", ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera'])
         is_h = 'havlupan' in secilen_model.lower() or any(z in secilen_model.lower() for z in ZORUNLU_HAVLUPANLAR)
-        l1, l2 = ("Genişlik (cm)", "Yükseklik (cm)") if is_h else ("Yükseklik (cm)", "Genişlik (cm)")
-        v1d, v2d = (50, 70) if is_h else (60, 100)
-    with cm2: v1 = st.number_input(l1, min_value=10, value=v1d)
-    with cm3: v2 = st.number_input(l2, min_value=10, value=v2d)
+    with cm2: v1 = st.number_input("Genişlik (cm)" if is_h else "Yükseklik (cm)", min_value=10, value=50 if is_h else 60)
+    with cm3: v2 = st.number_input("Yükseklik (cm)" if is_h else "Genişlik (cm)", min_value=10, value=70 if is_h else 100)
     with cm4: m_adet = st.number_input("Adet", min_value=1, value=1)
     if st.button("➕ Listeye Ekle", type="primary"):
         gi, yi = (v1, v2) if is_h else (v2, v1)
@@ -352,12 +333,6 @@ with tab_manuel:
     if st.session_state['manuel_liste']:
         df_m = pd.DataFrame(st.session_state['manuel_liste'])
         st.dataframe(df_m, use_container_width=True)
-        t_parca, t_desi = df_m['Adet'].sum(), df_m['Toplam Desi'].sum()
-        try: t_kg = sum([float(x['Toplam Ağırlık'].replace(' KG','')) for x in st.session_state['manuel_liste']])
-        except: t_kg = 0
-        c_t1, c_t2, c_t3 = st.columns(3)
-        c_t1.metric("Toplam Parça", t_parca); c_t2.metric("Genel Toplam Desi", f"{t_desi:.2f}"); c_t3.metric("Genel Toplam Ağırlık", f"{t_kg:.2f} KG")
-        
         m_etiketler, c = [], 1
         for item in st.session_state['manuel_liste']:
             for _ in range(item['Adet']):
