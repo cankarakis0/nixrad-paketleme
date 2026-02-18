@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import io
-import requests # İnternet üzerinden logo çekmek için
+import requests
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -158,7 +158,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (Link Logo + Görsel Tasarım)
+# PDF FONKSİYONLARI (SIĞDIRILMIŞ VE ÇAKIŞMASIZ TASARIM)
 # =============================================================================
 
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
@@ -166,68 +166,66 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
     width, height = 60*mm, 30*mm
     c = canvas.Canvas(buffer, pagesize=(width, height))
     
-    # LOGO LINKI
     logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
     for p in etiket_listesi:
-        # 1. Logo (Linkten Çekme)
+        # 1. Logo (Sol Üst Köşe - Yazılara basmasın diye küçük tuttuk)
         try:
             response = requests.get(logo_url)
             logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 2*mm, height - 7.5*mm, width=12*mm, height=6*mm, mask='auto')
+            c.drawImage(logo_img, 1*mm, height - 7.5*mm, width=12*mm, height=6*mm, mask='auto')
         except:
             pass
 
-        # Veri Hazırlığı
+        # Veriler
         no_str = f"{p['sira_no']}/{toplam_etiket_sayisi}"
-        gonderen = "NIXRAD / KARPAN DIZAYN A.S."
-        gonderen_adres = "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN Tel: 0262 658 11 58"
+        gonderen_header = "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S."
+        gonderen_info = "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN Tel: 0262 658 11 58"
         alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'] or "MUSTERI ADI")
         alici_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] or "ADRES GIRILMEDI")
         alici_tel = musteri_bilgileri['TELEFON'] or "TELEFON YOK"
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
         desi = f"DESI : {p['desi_val']}"
 
-        # --- TASARIM ÇİZİMİ ---
-        # 2. Gönderen Başlık (Üst Orta)
+        # 2. Üst Metinler (Logo yanına, sağa kaydırıldı)
         c.setFont("Helvetica-Bold", 4.5)
-        c.drawCentredString(width/2.0 + 3*mm, height - 3*mm, f"GONDEREN FIRMA: {gonderen}")
+        c.drawString(14*mm, height - 3*mm, gonderen_header)
         c.setFont("Helvetica", 3.5)
-        c.drawCentredString(width/2.0 + 3*mm, height - 5*mm, gonderen_adres)
+        c.drawString(14*mm, height - 5*mm, gonderen_info)
         
-        # 3. Sayfa No (Sağ Üst)
-        c.setFont("Helvetica-Bold", 10)
-        c.drawRightString(width - 2*mm, height - 7*mm, no_str)
+        # 3. Sayfa No (Sağ Üst Köşe)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawRightString(width - 2*mm, height - 6*mm, no_str)
 
-        # Çizgiler
+        # Çizgiler ve Bölmeler
         c.setLineWidth(0.15)
-        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm) # 1. Çizgi
+        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm) # Üst Çizgi
         
         # 4. Alıcı Satırı
-        c.setFont("Helvetica-Bold", 6.5)
+        c.setFont("Helvetica-Bold", 6)
         c.drawString(2*mm, height - 10.5*mm, f"ALICI MUSTERI: {alici_ad}")
         c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm) # 2. Çizgi
         
-        # 5. Adres Satırı
-        c.setFont("Helvetica-Bold", 5.5)
+        # 5. Adres Satırı (Küçük font ve 2 satır kontrolü)
+        c.setFont("Helvetica-Bold", 5)
         addr_y = height - 14*mm
-        if len(alici_adres) > 55:
-            c.drawString(2*mm, addr_y, f"ADRES :{alici_adres[:55]}")
-            c.drawString(2*mm, addr_y - 2.5*mm, alici_adres[55:110])
+        if len(alici_adres) > 60:
+            c.drawString(2*mm, addr_y, f"ADRES :{alici_adres[:60]}")
+            c.drawString(2*mm, addr_y - 2.5*mm, alici_adres[60:120])
         else:
             c.drawString(2*mm, addr_y, f"ADRES :{alici_adres}")
             
         c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm) # 3. Çizgi
         
         # 6. Telefon Satırı
-        c.setFont("Helvetica-Bold", 6.5)
+        c.setFont("Helvetica-Bold", 6)
         c.drawString(2*mm, height - 21*mm, f"TEL : {alici_tel}")
         c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm) # 4. Çizgi
         
-        # 7. Ürün ve Desi
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(2*mm, height - 25.5*mm, urun_adi)
+        # 7. Ürün Adı ve Desi (KÜÇÜLTÜLDÜ)
         c.setFont("Helvetica-Bold", 7)
+        c.drawString(2*mm, height - 25.5*mm, urun_adi)
+        c.setFont("Helvetica-Bold", 6.5)
         c.drawString(2*mm, height - 28.5*mm, desi)
         
         c.showPage()
@@ -235,6 +233,8 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
     c.save()
     buffer.seek(0)
     return buffer
+
+# --- DİĞER FONKSİYONLAR (CARGO VE PRODUCTION) ---
 
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
@@ -283,7 +283,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# 3. WEB ARAYÜZÜ
+# 3. WEB ARAYÜZÜ (KOLON HATASIZ)
 # =============================================================================
 
 st.markdown("""# 📦 NIXRAD Operasyon Paneli \n ### by [NETMAKER](https://netmaker.com.tr/)""", unsafe_allow_html=True)
