@@ -156,40 +156,70 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (Canvas ile kesin çözüm)
+# PDF FONKSİYONLARI (GÖRSELDEKİ TASARIM)
 # =============================================================================
 
-def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri):
+def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
-    # 60mm Genişlik x 30mm Yükseklik
     width, height = 60*mm, 30*mm
     c = canvas.Canvas(buffer, pagesize=(width, height))
 
     for p in etiket_listesi:
-        no = f"#{p['sira_no']}"
-        isim = tr_clean_for_pdf(p['kisa_isim'])
-        boyut = p['boyut_str']
-        desi = f"Desi: {p['desi_val']}"
-        cust = tr_clean_for_pdf((musteri_bilgileri['AD_SOYAD'] or "")[:20])
+        # Veri Hazırlığı
+        no_str = f"{p['sira_no']}/{toplam_etiket_sayisi}"
+        gonderen = "NIXRAD / KARPAN DIZAYN A.S."
+        gonderen_adres = "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN"
+        gonderen_tel = "Tel: 0262 658 11 58"
+        alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'] or "MUSTERI ADI")
+        alici_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] or "ADRES GIRILMEDI")
+        alici_tel = musteri_bilgileri['TELEFON'] or "TELEFON YOK"
+        urun_adi = tr_clean_for_pdf(p['kisa_isim'])
+        desi = f"DESI : {p['desi_val']}"
 
-        # 1. Koli No (Sağ Üst)
-        c.setFont("Helvetica-Bold", 8)
-        c.drawRightString(width - 2*mm, height - 5*mm, no)
+        # --- ÇİZİM ---
+        # 1. GÖNDEREN BİLGİSİ (Üst Kısım)
+        c.setFont("Helvetica-Bold", 4.5)
+        c.drawCentredString(width / 2.0, height - 3*mm, f"GONDEREN FIRMA: {gonderen}")
+        c.setFont("Helvetica", 4)
+        c.drawCentredString(width / 2.0, height - 5*mm, f"{gonderen_adres} {gonderen_tel}")
+        
+        # 2. ETİKET NUMARASI (Sağ Üst)
+        c.setFont("Helvetica-Bold", 10)
+        c.drawRightString(width - 2*mm, height - 7*mm, no_str)
 
-        # 2. Ürün İsmi (Orta)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawCentredString(width / 2.0, height - 12*mm, isim)
-
-        # 3. Ölçü (Alt Orta)
-        c.setFont("Helvetica", 8)
-        c.drawCentredString(width / 2.0, height - 18*mm, boyut)
-
-        # 4. Alt Bilgi (Desi + Müşteri)
+        # 3. ALICI BİLGİSİ
+        c.setLineWidth(0.1)
+        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm) # Üst çizgi
+        
+        c.setFont("Helvetica-Bold", 6)
+        c.drawString(2*mm, height - 10.5*mm, f"ALICI MUSTERI: {alici_ad}")
+        
+        c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm) # Adres öncesi çizgi
+        
+        # Adres (Otomatik Satır Atlatma Basit Mantık)
+        c.setFont("Helvetica-Bold", 5)
+        text_obj = c.beginText(2*mm, height - 14*mm)
+        text_obj.setLeading(6)
+        # Adresi parçalara böl (Basit sığdırma)
+        lines = [alici_adres[i:i+60] for i in range(0, len(alici_adres), 60)]
+        text_obj.textLine(f"ADRES :{lines[0]}")
+        for line in lines[1:2]: # Sadece 2 satır göster sığması için
+            text_obj.textLine(line)
+        c.drawText(text_obj)
+        
+        c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm) # Tel öncesi çizgi
+        
+        c.setFont("Helvetica-Bold", 6)
+        c.drawString(2*mm, height - 21*mm, f"TEL : {alici_tel}")
+        
+        c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm) # Ürün öncesi çizgi
+        
+        # 4. ÜRÜN VE DESİ
         c.setFont("Helvetica-Bold", 7)
-        footer_text = f"{desi} | {cust}"
-        c.drawCentredString(width / 2.0, 5*mm, footer_text)
-
-        c.showPage() # Yeni etikete geç (Yazıcı için bu sayfa sonu demek)
+        c.drawString(2*mm, height - 25*mm, urun_adi)
+        c.drawString(2*mm, height - 28.5*mm, desi)
+        
+        c.showPage()
 
     c.save()
     buffer.seek(0)
@@ -313,7 +343,7 @@ with tab_dosya:
         col_p1, col_p2, col_p3 = st.columns(3)
         col_p1.download_button("📄 1. KARGO FISI (A4)", create_cargo_pdf(p_desi, toplam_parca, musteri_data, final_etiket), "Kargo_Fisi.pdf", "application/pdf", use_container_width=True)
         col_p2.download_button("🏭 2. URETIM & ETIKET (A4)", create_production_pdf(final_malz, final_etiket, musteri_data), "Uretim_ve_Etiketler.pdf", "application/pdf", use_container_width=True)
-        col_p3.download_button("🏷️ 3. TERMAL ETIKET (3x6)", create_thermal_labels_3x6(final_etiket, musteri_data), "Termal_Etiketler.pdf", "application/pdf", use_container_width=True)
+        col_p3.download_button("🏷️ 3. TERMAL ETIKET (3x6)", create_thermal_labels_3x6(final_etiket, musteri_data, len(final_etiket)), "Termal_Etiketler.pdf", "application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
@@ -338,5 +368,5 @@ with tab_manuel:
             for _ in range(item['Adet']):
                 m_etiketler.append({'sira_no': c, 'kisa_isim': item['Model'], 'boyut_str': item['Kutulu Ölçü'], 'desi_val': item['Birim Desi']})
                 c += 1
-        st.download_button("🏷️ MANUEL TERMAL ETIKET BAS (3x6)", create_thermal_labels_3x6(m_etiketler, musteri_data), "Manuel_Etiketler.pdf", use_container_width=True)
+        st.download_button("🏷️ MANUEL TERMAL ETIKET BAS (3x6)", create_thermal_labels_3x6(m_etiketler, musteri_data, len(m_etiketler)), "Manuel_Etiketler.pdf", use_container_width=True)
         if st.button("🗑️ Listeyi Temizle"): st.session_state['manuel_liste'] = []; st.rerun()
