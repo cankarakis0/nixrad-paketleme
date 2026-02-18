@@ -158,7 +158,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (SIĞDIRILMIŞ VE ÇAKIŞMASIZ TASARIM)
+# PDF FONKSİYONLARI (SIĞDIRILMIŞ VE SIRALAMA SAĞ ALTA ALINMIŞ)
 # =============================================================================
 
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
@@ -169,11 +169,11 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
     logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
     for p in etiket_listesi:
-        # 1. Logo (Sol Üst Köşe - Yazılara basmasın diye küçük tuttuk)
+        # 1. Logo (Sol Üst)
         try:
             response = requests.get(logo_url)
             logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 1*mm, height - 7.5*mm, width=12*mm, height=6*mm, mask='auto')
+            c.drawImage(logo_img, 1*mm, height - 7*mm, width=12*mm, height=6*mm, mask='auto')
         except:
             pass
 
@@ -187,26 +187,22 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
         desi = f"DESI : {p['desi_val']}"
 
-        # 2. Üst Metinler (Logo yanına, sağa kaydırıldı)
+        # 2. Gönderen Metinleri (Sağa kaydırıldı, logoya yer açıldı)
         c.setFont("Helvetica-Bold", 4.5)
         c.drawString(14*mm, height - 3*mm, gonderen_header)
         c.setFont("Helvetica", 3.5)
         c.drawString(14*mm, height - 5*mm, gonderen_info)
-        
-        # 3. Sayfa No (Sağ Üst Köşe)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawRightString(width - 2*mm, height - 6*mm, no_str)
 
-        # Çizgiler ve Bölmeler
+        # 3. Üst Çizgi
         c.setLineWidth(0.15)
-        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm) # Üst Çizgi
+        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm)
         
         # 4. Alıcı Satırı
         c.setFont("Helvetica-Bold", 6)
         c.drawString(2*mm, height - 10.5*mm, f"ALICI MUSTERI: {alici_ad}")
-        c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm) # 2. Çizgi
+        c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm)
         
-        # 5. Adres Satırı (Küçük font ve 2 satır kontrolü)
+        # 5. Adres Satırı
         c.setFont("Helvetica-Bold", 5)
         addr_y = height - 14*mm
         if len(alici_adres) > 60:
@@ -215,18 +211,23 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
         else:
             c.drawString(2*mm, addr_y, f"ADRES :{alici_adres}")
             
-        c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm) # 3. Çizgi
+        c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm)
         
         # 6. Telefon Satırı
         c.setFont("Helvetica-Bold", 6)
         c.drawString(2*mm, height - 21*mm, f"TEL : {alici_tel}")
-        c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm) # 4. Çizgi
+        c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm)
         
-        # 7. Ürün Adı ve Desi (KÜÇÜLTÜLDÜ)
+        # 7. Ürün Adı
         c.setFont("Helvetica-Bold", 7)
         c.drawString(2*mm, height - 25.5*mm, urun_adi)
+        
+        # 8. Alt Satır: Desi (Sol) ve Sayfa No (Sağ Alta Alındı)
         c.setFont("Helvetica-Bold", 6.5)
         c.drawString(2*mm, height - 28.5*mm, desi)
+        
+        c.setFont("Helvetica-Bold", 9)
+        c.drawRightString(width - 2*mm, height - 28.5*mm, no_str)
         
         c.showPage()
 
@@ -234,7 +235,7 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
     buffer.seek(0)
     return buffer
 
-# --- DİĞER FONKSİYONLAR (CARGO VE PRODUCTION) ---
+# --- CARGO VE PRODUCTION PDF FONKSİYONLARI ---
 
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
@@ -283,7 +284,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# 3. WEB ARAYÜZÜ (KOLON HATASIZ)
+# 3. WEB ARAYÜZÜ
 # =============================================================================
 
 st.markdown("""# 📦 NIXRAD Operasyon Paneli \n ### by [NETMAKER](https://netmaker.com.tr/)""", unsafe_allow_html=True)
