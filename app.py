@@ -5,7 +5,7 @@ import io
 import requests
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -49,6 +49,7 @@ HAVLUPAN_BORU_CETVELI = {
 }
 
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
+LOGO_URL = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
 # =============================================================================
 # 2. YARDIMCI FONKSİYONLAR
@@ -128,8 +129,8 @@ def hesapla_ve_analiz_et(stok_adi, adet):
     
     reçete = get_standart_paket_icerigi(tip, tr_upper(bulunan_model_adi))
     
-    # --- GÜNCELLEME: PRAG İÇİN ÖZEL AYAR (+3 değil +2) ---
-    paylar = AYARLAR[tip].copy() # Orjinal ayarları bozmamak için kopyala
+    # --- GÜNCELLEME: PRAG İÇİN ÖZEL AYAR ---
+    paylar = AYARLAR[tip].copy() 
     if bulunan_model_key == 'prag':
         paylar['PAY_DERINLIK'] = 2.0
     # -----------------------------------------------------
@@ -167,11 +168,9 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     for m_key, m_val in MODEL_DERINLIKLERI.items():
         if m_key in model_lower: base_derinlik, model_key = m_val, m_key; break
     
-    # --- GÜNCELLEME: MANUEL HESAPLAMA İÇİN PRAG ÖZEL AYARI ---
     paylar = AYARLAR[tip].copy()
     if 'prag' in model_lower:
         paylar['PAY_DERINLIK'] = 2.0
-    # ---------------------------------------------------------
     
     k_en, k_boy, k_derin = genislik + paylar['PAY_GENISLIK'], yukseklik + paylar['PAY_YUKSEKLIK'], base_derinlik + paylar['PAY_DERINLIK']
     desi = round((k_en * k_boy * k_derin) / 3000, 2)
@@ -179,142 +178,162 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI
+# PDF FONKSİYONLARI (LOGOLU VE DÜZENLENMİŞ)
 # =============================================================================
-def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_listesi):
-    buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
-    styles = getSampleStyleSheet()
-    style_normal = ParagraphStyle('n', parent=styles['Normal'], fontSize=10, leading=12)
-    style_header = ParagraphStyle('h', parent=styles['Normal'], fontSize=14, leading=16, fontName='Helvetica-Bold', textColor=colors.darkred)
-    gonderen_info = [Paragraph("<b>GONDEREN FIRMA:</b>", style_normal), Paragraph("NIXRAD / KARPAN DIZAYN A.S.", style_header), Paragraph("Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN", style_normal), Paragraph("Tel: 0262 658 11 58", style_normal)]
-    odeme_clean = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI'))
-    odeme_info = [Paragraph("<b>ODEME TIPI:</b>", style_normal), Spacer(1, 0.5*cm), Paragraph(f"<b>{odeme_clean} ODEMELI</b>", ParagraphStyle('big', fontSize=14, alignment=TA_CENTER, fontName='Helvetica-Bold'))]
-    t_header = Table([[gonderen_info, odeme_info]], colWidths=[13*cm, 6*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 8), ('BACKGROUND', (0,0), (-1,-1), colors.whitesmoke)]))
-    elements.append(t_header); elements.append(Spacer(1, 0.5*cm))
-    alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD']) if musteri_bilgileri['AD_SOYAD'] else "....."
-    alici_tel = musteri_bilgileri['TELEFON'] if musteri_bilgileri['TELEFON'] else "....."
-    clean_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] if musteri_bilgileri['ADRES'] else "Adres Girilmedi")
-    alici_content = [Paragraph("<b>ALICI MUSTERI:</b>", style_normal), Paragraph(f"<b>{alici_ad}</b>", ParagraphStyle('alici_ad_huge', fontSize=22, leading=26, fontName='Helvetica-Bold', spaceBefore=6, spaceAfter=12)), Paragraph(f"<b>Tel:</b> {alici_tel}", ParagraphStyle('tel_big', fontSize=12, leading=14)), Spacer(1, 0.5*cm), Paragraph(f"<b>ADRES:</b><br/>{clean_adres}", ParagraphStyle('adres_style_big', fontSize=15, leading=20))]
-    t_alici = Table([[alici_content]], colWidths=[19*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 2, colors.black), ('PADDING', (0,0), (-1,-1), 15)]))
-    elements.append(t_alici); elements.append(Spacer(1, 0.5*cm))
-    elements.append(Paragraph("<b>PAKET ICERIK OZETI:</b>", ParagraphStyle('b', fontSize=10, fontName='Helvetica-Bold'))); elements.append(Spacer(1, 0.2*cm))
-    
-    pkt_data = [['Koli No', 'Urun Adi', 'Olcu', 'Desi']] + [[f"#{p['sira_no']}", tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val'])] for i, p in enumerate(etiket_listesi) if i < 15]
-    
-    t_pkt = Table(pkt_data, colWidths=[2*cm, 11*cm, 4*cm, 2*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.grey), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('FONTSIZE', (0,0), (-1,-1), 9)]))
-    elements.append(t_pkt); elements.append(Spacer(1, 0.5*cm))
-    summary_data = [[f"TOPLAM PARCA: {toplam_parca}", f"TOPLAM DESI: {proje_toplam_desi:.2f}"]]
-    t_sum = Table(summary_data, colWidths=[9.5*cm, 9.5*cm], style=TableStyle([('ALIGN', (0,0), (0,0), 'LEFT'), ('ALIGN', (1,0), (1,0), 'RIGHT'), ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 14), ('TEXTCOLOR', (1,0), (1,0), colors.blue), ('LINEBELOW', (0,0), (-1,-1), 2, colors.black)]))
-    elements.append(t_sum); elements.append(Spacer(1, 1*cm))
-    
-    warning_title = Paragraph("<b>DIKKAT KIRILIR !</b>", ParagraphStyle('WT', fontSize=26, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold'))
-    warning_text = """SAYIN MUSTERIMIZ,<br/>GELEN KARGONUZUN BULUNDUGU PAKETLERIN SAGLAM VE PAKETLERDE EZIKLIK OLMADIGINI KONTROL EDEREK ALINIZ. EKSIK VEYA HASARLI MALZEME VARSA LUTFEN KARGO GOREVLISINE AYNI GUN TUTANAK TUTTURUNUZ."""
-    warning_para = Paragraph(warning_text, ParagraphStyle('warn', alignment=TA_CENTER, textColor=colors.white, fontSize=11, leading=14, fontName='Helvetica-Bold'))
-    t_warn = Table([[warning_title], [warning_para]], colWidths=[19*cm], style=TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.black), ('BOX', (0,0), (-1,-1), 1, colors.black), ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('PADDING', (0,0), (-1,-1), 10), ('BOTTOMPADDING', (0,0), (-1,0), 10)]))
-    elements.append(t_warn)
-    doc.build(elements); buffer.seek(0); return buffer
 
-def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
-    buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=0.5*cm, leftMargin=0.5*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
-    styles = getSampleStyleSheet()
-    cust_name = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD']) if musteri_bilgileri['AD_SOYAD'] else "Isim Girilmedi"
-    elements.append(Paragraph(f"URETIM & PAKETLEME EMRI - {cust_name}", ParagraphStyle('Title', fontSize=16, alignment=TA_CENTER, fontName='Helvetica-Bold', spaceAfter=15)))
-    data = [['MALZEME ADI', 'ADET', 'KONTROL']] + [[Paragraph(tr_clean_for_pdf(m), ParagraphStyle('malz_style', fontSize=10, fontName='Helvetica')), f"{int(v)}" if v%1==0 else f"{v:.1f}", "___"] for m, v in tum_malzemeler.items()]
-    t = Table(data, colWidths=[14*cm, 2*cm, 3*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (1,0), (-1,-1), 'CENTER'), ('ALIGN', (2,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('PADDING', (0,0), (-1,-1), 6)]))
-    elements.append(t); elements.append(Spacer(1, 1*cm))
-    signature_data = [["PAKETLEYEN PERSONEL", "", ""], ["Adi Soyadi: ....................................", "", ""], ["Imza: ....................................", "", ""]]
-    t_sig = Table(signature_data, colWidths=[8*cm, 2*cm, 8*cm], style=TableStyle([('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
-    elements.append(t_sig); elements.append(Spacer(1, 0.5*cm)); elements.append(Paragraph("-" * 120, ParagraphStyle('sep', alignment=TA_CENTER))); elements.append(Paragraph("ASAGIDAKI ETIKETLERI KESIP KOLILERE YAPISTIRINIZ (6x6 cm)", ParagraphStyle('Small', fontSize=8, alignment=TA_CENTER))); elements.append(Spacer(1, 0.5*cm))
-    
-    sticker_data, row = [], []
-    style_num = ParagraphStyle('n', parent=styles['Normal'], alignment=TA_RIGHT, fontSize=14, textColor=colors.black, fontName='Helvetica-Bold')
-    style_cust = ParagraphStyle('c_bold', alignment=TA_CENTER, fontSize=10, fontName='Helvetica-Bold', textColor=colors.black)
-    
-    for p in etiket_listesi:
-        isim, boyut, desi, no = tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val']), str(p['sira_no'])
-        cust = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'][:25]) if musteri_bilgileri['AD_SOYAD'] else ""
-        content = [[Paragraph(f"<b>#{no}</b>", style_num)], [Paragraph(f"<b>{isim}</b>", ParagraphStyle('C', alignment=TA_CENTER, fontSize=9))], [Paragraph(f"{boyut}", ParagraphStyle('C', alignment=TA_CENTER, fontSize=8))], [Spacer(1, 0.2*cm)], [Paragraph(f"<b>Desi: {desi}</b>", ParagraphStyle('L', alignment=TA_LEFT, fontSize=11))], [Paragraph(f"<b>{cust}</b>", style_cust)]]
-        box = Table(content, colWidths=[5.8*cm], rowHeights=[0.8*cm, 1.2*cm, 0.5*cm, 0.5*cm, 0.8*cm, 0.5*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 0), ('BOTTOMPADDING', (0,0), (-1,-1), 0)]))
-        row.append(box)
-        if len(row)==3: sticker_data.append(row); row = []
-    if row: 
-        while len(row)<3: row.append("")
-        sticker_data.append(row)
-    if sticker_data: elements.append(Table(sticker_data, colWidths=[6.5*cm]*3, style=TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 15)])))
-    doc.build(elements); buffer.seek(0); return buffer
-
-# --- İSTEDİĞİN 3x6 TERMAL ETİKET FONKSİYONU ---
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
-    # 60mm Genislik x 30mm Yukseklik
     width, height = 60*mm, 30*mm
     c = canvas.Canvas(buffer, pagesize=(width, height))
     
-    # Logo URL
-    logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
+    try:
+        resp = requests.get(LOGO_URL)
+        logo_img = ImageReader(io.BytesIO(resp.content))
+    except:
+        logo_img = None
 
     for p in etiket_listesi:
-        # 1. Logo Cizimi (Sol Ust)
-        try:
-            response = requests.get(logo_url)
-            logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 1*mm, height - 7.5*mm, width=12*mm, height=6*mm, mask='auto')
-        except:
-            pass
+        # Logo Çizimi
+        if logo_img: c.drawImage(logo_img, 1*mm, height - 7.5*mm, width=12*mm, height=6*mm, mask='auto')
 
-        # Veri Hazirligi
+        # Veri Hazırlığı
         no_str = f"{p['sira_no']}/{toplam_etiket_sayisi}"
-        alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'MUSTERI ADI'))
-        alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI'))
-        alici_tel = musteri_bilgileri.get('TELEFON', 'TELEFON YOK')
+        alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'] or "MUSTERI ADI")
+        alici_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] or "ADRES GIRILMEDI")
+        alici_tel = musteri_bilgileri['TELEFON'] or "TELEFON YOK"
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
         desi_text = f"DESI : {p['desi_val']}"
 
-        # 2. Gonderen Bilgileri (Sag Ust)
+        # Tasarım
         c.setFont("Helvetica-Bold", 4.5)
         c.drawString(14*mm, height - 3*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
         c.setFont("Helvetica", 3.5)
         c.drawString(14*mm, height - 5*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN Tel: 0262 658 11 58")
         
-        # Cizgi 1
-        c.setLineWidth(0.15)
-        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm)
-        
-        # 3. Alici Adi
-        c.setFont("Helvetica-Bold", 6)
-        c.drawString(2*mm, height - 10.5*mm, f"ALICI MUSTERI: {alici_ad}")
+        c.setLineWidth(0.15); c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm)
+        c.setFont("Helvetica-Bold", 6); c.drawString(2*mm, height - 10.5*mm, f"ALICI MUSTERI: {alici_ad}")
         c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm)
         
-        # 4. Adres (Uzunsa iki satir)
-        c.setFont("Helvetica-Bold", 5)
-        addr_y = height - 14*mm
+        c.setFont("Helvetica-Bold", 5); addr_y = height - 14*mm
         if len(alici_adres) > 60:
-            c.drawString(2*mm, addr_y, f"ADRES :{alici_adres[:60]}")
-            c.drawString(2*mm, addr_y - 2.5*mm, alici_adres[60:120])
+            c.drawString(2*mm, addr_y, f"ADRES :{alici_adres[:60]}"); c.drawString(2*mm, addr_y - 2.5*mm, alici_adres[60:120])
         else:
             c.drawString(2*mm, addr_y, f"ADRES :{alici_adres}")
         
         c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm)
-        
-        # 5. Telefon
-        c.setFont("Helvetica-Bold", 6)
-        c.drawString(2*mm, height - 21*mm, f"TEL : {alici_tel}")
+        c.setFont("Helvetica-Bold", 6); c.drawString(2*mm, height - 21*mm, f"TEL : {alici_tel}")
         c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm)
         
-        # 6. Urun Adi ve Desi
-        c.setFont("Helvetica-Bold", 7)
-        c.drawString(2*mm, height - 25.5*mm, urun_adi)
+        c.setFont("Helvetica-Bold", 7); c.drawString(2*mm, height - 25.5*mm, urun_adi)
+        c.setFont("Helvetica-Bold", 6.5); c.drawString(2*mm, height - 28.5*mm, desi_text)
         
-        c.setFont("Helvetica-Bold", 6.5)
-        c.drawString(2*mm, height - 28.5*mm, desi_text)
-        
-        # 7. Etiket Sira No (SAG EN ALT KOSE)
-        c.setFont("Helvetica-Bold", 9)
-        c.drawRightString(width - 2*mm, height - 28.5*mm, no_str)
-        
-        c.showPage() # Sayfayi bitir
+        # Etiket Sırası (Sağ Alt)
+        c.setFont("Helvetica-Bold", 9); c.drawRightString(width - 2*mm, height - 28.5*mm, no_str)
+        c.showPage()
     
     c.save()
+    buffer.seek(0)
+    return buffer
+
+def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, ham_tablo_verisi):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm)
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    try:
+        resp = requests.get(LOGO_URL)
+        img_data = io.BytesIO(resp.content)
+        logo = Image(img_data, width=4*cm, height=2*cm)
+        elements.append(logo)
+        elements.append(Spacer(1, 0.2*cm))
+    except:
+        pass
+
+    gonderen_info = [
+        Paragraph("<b>GONDEREN FIRMA:</b>", styles['Normal']),
+        Paragraph("NIXRAD / KARPAN DIZAYN A.S.", ParagraphStyle('h', fontSize=14, fontName='Helvetica-Bold', textColor=colors.darkred)),
+        Paragraph("Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN Tel: 0262 658 11 58", styles['Normal'])
+    ]
+    odeme_info = [
+        Paragraph("<b>ODEME TIPI:</b>", styles['Normal']),
+        Spacer(1, 0.5*cm),
+        Paragraph(f"<b>{tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI'))} ODEMELI</b>", ParagraphStyle('big', fontSize=14, alignment=TA_CENTER, fontName='Helvetica-Bold'))
+    ]
+    
+    t_header = Table([[gonderen_info, odeme_info]], colWidths=[13*cm, 6*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'TOP'), ('BACKGROUND', (0,0), (-1,-1), colors.whitesmoke)]))
+    elements.append(t_header)
+    elements.append(Spacer(1, 0.5*cm))
+
+    alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'] or ".....")
+    alici_tel = musteri_bilgileri['TELEFON'] or "....."
+    clean_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] or "Adres Girilmedi")
+    
+    alici_content = [
+        Paragraph(f"<b>ALICI MUSTERI: {alici_ad}</b>", ParagraphStyle('huge', fontSize=20, fontName='Helvetica-Bold')),
+        Paragraph(f"<b>Tel:</b> {alici_tel}", styles['Normal']),
+        Spacer(1, 0.5*cm),
+        Paragraph(f"<b>ADRES:</b><br/>{clean_adres}", ParagraphStyle('adr', fontSize=14, leading=18))
+    ]
+    elements.append(Table([[alici_content]], colWidths=[19*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 2, colors.black), ('PADDING', (0,0), (-1,-1), 10)])))
+    elements.append(Spacer(1, 0.5*cm))
+
+    # ADET SÜTUNU EKLENMİŞ TABLO
+    pkt_data = [['Urun Adi', 'Adet', 'Olcu', 'Desi']] 
+    for row in ham_tablo_verisi:
+        pkt_data.append([tr_clean_for_pdf(row['Ürün']), str(row['Adet']), row['Ölçü'], str(row['Birim Desi'])])
+    
+    t_pkt = Table(pkt_data, colWidths=[10*cm, 2*cm, 5*cm, 2*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.grey), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (1,0), (1,0), 'CENTER')]))
+    elements.append(t_pkt)
+    elements.append(Spacer(1, 0.5*cm))
+
+    summary_data = [[f"TOPLAM KOLI: {int(toplam_parca)}", f"TOPLAM DESI: {proje_toplam_desi:.2f}"]]
+    elements.append(Table(summary_data, colWidths=[9.5*cm, 9.5*cm], style=TableStyle([
+        ('ALIGN', (1,0), (1,0), 'RIGHT'), 
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'), 
+        ('FONTSIZE', (0,0), (-1,-1), 14),
+        ('TEXTCOLOR', (1,0), (1,0), colors.black), # DESİ SİYAH
+        ('LINEBELOW', (0,0), (-1,-1), 2, colors.black)])))
+    
+    elements.append(Spacer(1, 1*cm))
+    warning = Table([[Paragraph("<b>DIKKAT KIRILIR !</b>", ParagraphStyle('WT', fontSize=24, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold'))], [Paragraph("SAYIN MUSTERIMIZ, PAKETLERI KONTROL EDEREK ALINIZ. HASAR VARSA KARGOYA TUTANAK TUTTURUNUZ.", ParagraphStyle('warn', alignment=TA_CENTER, textColor=colors.white, fontSize=10, fontName='Helvetica-Bold'))]], colWidths=[19*cm], style=TableStyle([('BACKGROUND', (0,0), (-1,-1), colors.black), ('PADDING', (0,0), (-1,-1), 10)]))
+    elements.append(warning)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
+    buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=0.5*cm, leftMargin=0.5*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
+    styles = getSampleStyleSheet()
+    elements.append(Paragraph(f"URETIM & PAKETLEME EMRI - {tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'] or 'Isim Girilmedi')}", ParagraphStyle('T', fontSize=16, alignment=TA_CENTER, fontName='Helvetica-Bold')))
+    
+    data = [['MALZEME ADI', 'ADET', 'KONTROL']] + [[Paragraph(tr_clean_for_pdf(m), ParagraphStyle('malz_style', fontSize=10, fontName='Helvetica')), f"{int(v)}" if v%1==0 else f"{v:.1f}", "___"] for m, v in tum_malzemeler.items()]
+    elements.append(Table(data, colWidths=[14*cm, 2*cm, 3*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (1,0), (-1,-1), 'CENTER'), ('ALIGN', (2,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('PADDING', (0,0), (-1,-1), 6)])))
+    elements.append(Spacer(1, 1*cm))
+    
+    t_sig = Table([["PAKETLEYEN PERSONEL", "", ""], ["Adi Soyadi: ....................................", "", ""], ["Imza: ....................................", "", ""]], colWidths=[8*cm, 2*cm, 8*cm], style=TableStyle([('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (0,0), (-1,-1), 'LEFT'), ('BOTTOMPADDING', (0,0), (-1,-1), 10)]))
+    elements.append(t_sig); elements.append(Spacer(1, 0.5*cm)); elements.append(Paragraph("-" * 120, ParagraphStyle('sep', alignment=TA_CENTER))); elements.append(Paragraph("ASAGIDAKI ETIKETLERI KESIP KOLILERE YAPISTIRINIZ (6x6 cm)", ParagraphStyle('Small', fontSize=8, alignment=TA_CENTER))); elements.append(Spacer(1, 0.5*cm))
+
+    sticker_data, row = [], []
+    for p in etiket_listesi:
+        box = Table([
+            [Paragraph(f"<b>#{p['sira_no']}</b>", ParagraphStyle('n', alignment=TA_RIGHT, fontSize=12, fontName='Helvetica-Bold'))], 
+            [Paragraph(f"<b>{tr_clean_for_pdf(p['kisa_isim'])}</b>", ParagraphStyle('C', alignment=TA_CENTER, fontSize=9))], 
+            [Paragraph(f"{p['boyut_str']}", ParagraphStyle('C', alignment=TA_CENTER, fontSize=8))], 
+            [Spacer(1, 0.2*cm)], 
+            [Paragraph(f"<b>Desi: {p['desi_val']}</b>", ParagraphStyle('L', alignment=TA_LEFT, fontSize=10))], 
+            [Paragraph(f"<b>{tr_clean_for_pdf((musteri_bilgileri['AD_SOYAD'] or '')[:20])}</b>", ParagraphStyle('cb', alignment=TA_CENTER, fontSize=9, fontName='Helvetica-Bold'))]
+        ], colWidths=[5.8*cm], rowHeights=[0.8*cm, 1*cm, 0.5*cm, 0.4*cm, 0.8*cm, 0.5*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE')]))
+        row.append(box)
+        if len(row)==3: sticker_data.append(row); row = []
+    
+    if row: 
+        row.extend([""] * (3 - len(row)))
+        sticker_data.append(row)
+    
+    elements.append(Table(sticker_data, colWidths=[6.5*cm]*3, style=TableStyle([('BOTTOMPADDING', (0,0), (-1,-1), 15)])))
+    doc.build(elements)
     buffer.seek(0)
     return buffer
 
@@ -322,14 +341,7 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
 # 3. WEB ARAYÜZÜ
 # =============================================================================
 
-st.markdown(
-    """
-    # 📦 NIXRAD Operasyon Paneli 
-    ### by [NETMAKER](https://netmaker.com.tr/)
-    """, 
-    unsafe_allow_html=True
-)
-
+st.markdown("""# 📦 NIXRAD Operasyon Paneli \n ### by [NETMAKER](https://netmaker.com.tr/)""", unsafe_allow_html=True)
 st.sidebar.header("Musteri Bilgileri")
 ad_soyad = st.sidebar.text_input("Adi Soyadi / Firma Adi")
 telefon = st.sidebar.text_input("Telefon Numarasi")
@@ -337,238 +349,171 @@ adres = st.sidebar.text_area("Adres (Enter ile alt satira gecebilirsiniz)")
 odeme_tipi = st.sidebar.radio("Odeme Tipi", ["ALICI", "PESIN"], index=0)
 musteri_data = {'AD_SOYAD': ad_soyad, 'TELEFON': telefon, 'ADRES': adres, 'ODEME_TIPI': odeme_tipi}
 
-# SEKMELER (TABS)
 tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı"])
 
 # --- TAB 1: DOSYA YÜKLEME ---
 with tab_dosya:
     uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
-
-    # Session state for data persistence
     if 'ham_veri' not in st.session_state: st.session_state['ham_veri'] = []
     if 'malzeme_listesi' not in st.session_state: st.session_state['malzeme_listesi'] = {}
 
-    if uploaded_file:
-        if st.button("Dosyayı Analiz Et ve Düzenle"):
-            try:
-                if uploaded_file.name.endswith('.csv'):
-                    try: df_raw = pd.read_csv(uploaded_file, encoding='utf-8')
-                    except: df_raw = pd.read_csv(uploaded_file, encoding='cp1254')
-                else:
-                    df_raw = pd.read_excel(uploaded_file)
+    if uploaded_file and st.button("Dosyayı Analiz Et ve Düzenle"):
+        try:
+            if uploaded_file.name.endswith('.csv'):
+                try: df_raw = pd.read_csv(uploaded_file, encoding='utf-8')
+                except: df_raw = pd.read_csv(uploaded_file, encoding='cp1254')
+            else: df_raw = pd.read_excel(uploaded_file)
+            
+            header_index = -1
+            for i, row in df_raw.iterrows():
+                if "Stok Adı" in " ".join([str(v) for v in row.values]): header_index = i; break
+            
+            if header_index != -1:
+                new_header = df_raw.iloc[header_index]
+                df = df_raw[header_index + 1:].copy()
+                df.columns = [str(col).strip() for col in new_header]
+                try: df = df[['Stok Adı', 'Miktar']]
+                except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
+                df = df.dropna(subset=['Stok Adı'])
                 
-                header_index = -1
-                for i, row in df_raw.iterrows():
-                    if "Stok Adı" in " ".join([str(v) for v in row.values]): header_index = i; break
+                st.session_state['ham_veri'] = []
+                st.session_state['malzeme_listesi'] = {}
                 
-                if header_index != -1:
-                    new_header = df_raw.iloc[header_index]
-                    df = df_raw[header_index + 1:].copy()
-                    df.columns = [str(col).strip() for col in new_header]
-                    try: df = df[['Stok Adı', 'Miktar']]
-                    except: df = df.iloc[:, [0, 2]]; df.columns = ['Stok Adı', 'Miktar']
-                    df = df.dropna(subset=['Stok Adı'])
-                    
-                    st.session_state['ham_veri'] = [] # Reset
-                    st.session_state['malzeme_listesi'] = {} # Reset
-                    
-                    for index, row in df.iterrows():
-                        try: adet = float(row['Miktar'])
-                        except: adet = 0
-                        stok_adi = str(row['Stok Adı']); stok_lower = tr_lower(stok_adi)
-                        
-                        if adet > 0:
-                            is_vana_accessory = ('vana' in stok_lower) and ('nirvana' not in stok_lower)
-                            is_other_accessory = any(x in stok_lower for x in ['volan', 'tapa', 'aksesuar', 'set', 'termo', 'köşe'])
-                            
-                            if is_vana_accessory or is_other_accessory:
-                                 key = f"{stok_adi} (Adet)"
-                                 st.session_state['malzeme_listesi'][key] = st.session_state['malzeme_listesi'].get(key, 0) + adet
-                            
-                            elif 'radyatör' in stok_lower or 'havlupan' in stok_lower or 'radyator' in stok_lower:
-                                analiz = hesapla_ve_analiz_et(stok_adi, adet)
-                                if analiz:
-                                    # Malzeme listesi için reçeteyi işle
-                                    for miktar, birim, ad in analiz['Reçete']:
-                                        key = f"{ad} ({birim})"
-                                        st.session_state['malzeme_listesi'][key] = st.session_state['malzeme_listesi'].get(key, 0) + (miktar * adet)
-                                    
-                                    # Tablo verisine ekle (Düzenlenecek veri)
-                                    st.session_state['ham_veri'].append({
-                                        "Ürün": analiz['Etiket']['kisa_isim'],
-                                        "Adet": int(adet),
-                                        "Ölçü": analiz['Etiket']['boyut_str'],
-                                        "Birim Desi": analiz['Etiket']['desi_val'],
-                                        "Toplam Ağırlık": analiz['Toplam_Agirlik_Gosterim']
-                                    })
-                else:
-                    st.error("Dosyada 'Stok Adı' basligi bulunamadi.")
-            except Exception as e:
-                st.error(f"Hata: {e}")
+                for index, row in df.iterrows():
+                    try: adet = float(row['Miktar'])
+                    except: adet = 0
+                    stok_adi = str(row['Stok Adı']); stok_lower = tr_lower(stok_adi)
+                    if adet > 0:
+                        if ('vana' in stok_lower and 'nirvana' not in stok_lower) or any(x in stok_lower for x in ['volan', 'tapa', 'aksesuar', 'set', 'termo', 'köşe']):
+                            key = f"{stok_adi} (Adet)"
+                            st.session_state['malzeme_listesi'][key] = st.session_state['malzeme_listesi'].get(key, 0) + adet
+                        elif any(x in stok_lower for x in ['radyatör', 'havlupan', 'radyator']):
+                            analiz = hesapla_ve_analiz_et(stok_adi, adet)
+                            if analiz:
+                                for m, b, ad in analiz['Reçete']:
+                                    key = f"{ad} ({b})"
+                                    st.session_state['malzeme_listesi'][key] = st.session_state['malzeme_listesi'].get(key, 0) + (m * adet)
+                                st.session_state['ham_veri'].append({
+                                    "Ürün": analiz['Etiket']['kisa_isim'], "Adet": int(adet), "Ölçü": analiz['Etiket']['boyut_str'],
+                                    "Birim Desi": analiz['Etiket']['desi_val'], "Toplam Ağırlık": analiz['Toplam_Agirlik_Gosterim']
+                                })
+            else: st.error("Dosyada 'Stok Adı' basligi bulunamadi.")
+        except Exception as e: st.error(f"Hata: {e}")
 
-    # DÜZENLEME EKRANI (BURASI DEĞİŞTİ - ÖZET EN ÜSTE ALINDI)
     if st.session_state['ham_veri']:
         st.divider()
-        
-        # 1. ADIM: ÖZET İÇİN YER AYIRIYORUZ (EN ÜSTE)
         ozet_alani = st.container()
-
         st.info("📝 Aşağıdaki tablodan Ürün Adı, Adet, Ölçü ve Desi bilgilerini düzenleyebilirsiniz.")
-        
-        # 2. ADIM: TABLOYU ÇİZİYORUZ VE VERİYİ ALIYORUZ
         edited_df = st.data_editor(
-            pd.DataFrame(st.session_state['ham_veri']),
-            num_rows="dynamic",
-            use_container_width=True,
+            pd.DataFrame(st.session_state['ham_veri']), num_rows="dynamic", use_container_width=True,
             column_config={
                 "Adet": st.column_config.NumberColumn(format="%d"),
                 "Birim Desi": st.column_config.NumberColumn(format="%.2f"),
                 "Toplam Ağırlık": st.column_config.NumberColumn(format="%.1f")
             }
         )
-
-        # 3. ADIM: HESAPLAMALARI YAPIYORUZ
         toplam_parca = edited_df["Adet"].sum()
         proje_toplam_desi = (edited_df["Birim Desi"] * edited_df["Adet"]).sum()
         proje_toplam_agirlik = edited_df["Toplam Ağırlık"].sum()
 
-        # 4. ADIM: AYIRDIĞIMIZ ÜST ALANA SONUÇLARI YAZDIRIYORUZ
         with ozet_alani:
             st.subheader("📊 Proje Özeti")
             c1, c2, c3 = st.columns(3)
             c1.metric("📦 Toplam Koli", int(toplam_parca))
             c2.metric("📐 Toplam Desi", f"{proje_toplam_desi:.2f}")
             c3.metric("⚖️ Toplam Ağırlık", f"{proje_toplam_agirlik:.1f} KG")
-            
-            # Kopyalama Alanı
-            kopyalanacak_metin = f"toplam desi {proje_toplam_desi:.2f}  toplam ağırlık {proje_toplam_agirlik:.1f}"
-            st.code(kopyalanacak_metin, language="text")
-            st.divider() # Görsel ayırıcı
+            st.code(f"toplam desi {proje_toplam_desi:.2f}  toplam ağırlık {proje_toplam_agirlik:.1f}", language="text")
+            st.divider()
 
-        # 5. ADIM: MALZEME LİSTESİ VE DİĞERLERİ
         st.subheader("🛠️ Malzeme Çek Listesi (Düzenlenebilir)")
-        
         malz_df = pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()])
-        
-        edited_malz_df = st.data_editor(
-            malz_df,
-            key="malzeme_editor",
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Adet": st.column_config.NumberColumn(format="%.1f")
-            }
-        )
-        
+        edited_malz_df = st.data_editor(malz_df, key="malzeme_editor", num_rows="dynamic", use_container_width=True, column_config={"Adet": st.column_config.NumberColumn(format="%.1f")})
         final_malzeme_listesi = dict(zip(edited_malz_df['Malzeme'], edited_malz_df['Adet']))
 
-        # PDF İçin Etiket Listesini Yeniden Oluştur (Düzenlenmiş veriden)
         final_etiket_listesi = []
         global_counter = 1
-        
         for index, row in edited_df.iterrows():
-            qty = int(row['Adet'])
-            for i in range(qty):
-                final_etiket_listesi.append({
-                    'sira_no': global_counter,
-                    'kisa_isim': row['Ürün'],
-                    'boyut_str': row['Ölçü'],
-                    'desi_val': row['Birim Desi']
-                })
+            for i in range(int(row['Adet'])):
+                final_etiket_listesi.append({'sira_no': global_counter, 'kisa_isim': row['Ürün'], 'boyut_str': row['Ölçü'], 'desi_val': row['Birim Desi']})
                 global_counter += 1
 
-        st.divider()
-        st.subheader("🖨️ Düzenlenmiş Çıktı Al")
+        st.divider(); st.subheader("🖨️ Düzenlenmiş Çıktı Al")
         col_pdf1, col_pdf2, col_pdf3 = st.columns(3)
-        
-        # Kargo Fisi
-        pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, final_etiket_listesi)
-        col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
+        # GÜNCEL: Tablo verisini (edited_df) kargo fişine gönderiyoruz ki Adet sütunu olsun
+        col_pdf1.download_button("📄 1. KARGO FISI (A4)", create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, edited_df.to_dict('records')), "Kargo_Fisi.pdf", "application/pdf", use_container_width=True)
+        col_pdf2.download_button("🏭 2. URETIM & ETIKETLER", create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data), "Uretim_ve_Etiketler.pdf", "application/pdf", use_container_width=True)
+        # GÜNCEL: Yeni termal etiket fonksiyonu
+        col_pdf3.download_button("🏷️ 3. TERMAL ETIKET (3x6)", create_thermal_labels_3x6(final_etiket_listesi, musteri_data, len(final_etiket_listesi)), "Termal_Etiketler.pdf", "application/pdf", use_container_width=True)
 
-        # Üretim Emri
-        pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
-        col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
-
-        # Termal Etiket
-        pdf_thermal = create_thermal_labels_3x6(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (6x3)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
-
-# --- TAB 2: MANUEL HESAPLAYICI ---
+# --- TAB 2: MANUEL HESAPLAYICI (BARKOD DESTEKLİ) ---
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
+    if 'manuel_liste' not in st.session_state: st.session_state['manuel_liste'] = []
     
-    if 'manuel_liste' not in st.session_state:
-        st.session_state['manuel_liste'] = []
+    # --- BARKOD İLE HIZLI EKLEME KISMI ---
+    def barkod_ekle():
+        kod = st.session_state.barkod_scanner
+        if kod:
+            # 1 adet varsayılan olarak hesapla
+            analiz = hesapla_ve_analiz_et(kod, 1)
+            if analiz:
+                # Başarılıysa listeye ekle
+                st.session_state['manuel_liste'].append({
+                    "Ürün": analiz['Etiket']['kisa_isim'],
+                    "Ölçü": analiz['Etiket']['boyut_str'],
+                    "Kutulu Ölçü": analiz['Etiket']['boyut_str'], # Kutulu ile Ölçü aynı mantıkla
+                    "Adet": 1,
+                    "Birim Desi": analiz['Etiket']['desi_val'],
+                    "Toplam Desi": analiz['Etiket']['desi_val'],
+                    "Toplam Ağırlık": f"{analiz['Toplam_Agirlik_Gosterim']:.2f} KG"
+                })
+                st.toast(f"Eklendi: {kod}", icon="✅")
+            else:
+                st.toast(f"Barkod anlaşılamadı: {kod}", icon="❌")
+            # Kutuyu temizle
+            st.session_state.barkod_scanner = ""
 
-    # Giriş Alanları
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    with col_m1:
-        # Menüde doğru isimler görünsün
-        display_models = ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera']
-        secilen_model = st.selectbox("Model Seçin", display_models)
-        
-        model_lower = secilen_model.lower()
-        is_havlupan = 'havlupan' in model_lower or any(z in model_lower for z in ZORUNLU_HAVLUPANLAR)
-        
-        if is_havlupan:
-            label_1 = "Genişlik (cm)"  
-            label_2 = "Yükseklik (cm)" 
-            val_1_default = 50
-            val_2_default = 70
-        else:
-            label_1 = "Yükseklik (cm)" 
-            label_2 = "Genişlik (cm)"  
-            val_1_default = 60
-            val_2_default = 100
-        
-    with col_m2:
-        val_1 = st.number_input(label_1, min_value=10, value=val_1_default)
-    with col_m3:
-        val_2 = st.number_input(label_2, min_value=10, value=val_2_default)
-    with col_m4:
-        m_adet = st.number_input("Adet", min_value=1, value=1)
-        
+    st.text_input("Barkod Okutunuz (Hızlı Ekle)", key="barkod_scanner", on_change=barkod_ekle, help="El terminali ile buraya okutun, otomatik eklenir.")
+    st.divider()
+    # ----------------------------------------
+
+    cm1, cm2, cm3, cm4 = st.columns(4)
+    with cm1:
+        secilen_model = st.selectbox("Model Seçin", ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera'])
+        is_havlupan = 'havlupan' in secilen_model.lower() or any(z in secilen_model.lower() for z in ZORUNLU_HAVLUPANLAR)
+        l1, l2 = ("Genişlik (cm)", "Yükseklik (cm)") if is_havlupan else ("Yükseklik (cm)", "Genişlik (cm)")
+        v1_d, v2_d = (50, 70) if is_havlupan else (60, 100)
+    with cm2: val_1 = st.number_input(l1, min_value=10, value=v1_d)
+    with cm3: val_2 = st.number_input(l2, min_value=10, value=v2_d)
+    with cm4: m_adet = st.number_input("Adet", min_value=1, value=1)
+    
     if st.button("➕ Listeye Ekle", type="primary"):
-        if is_havlupan:
-            g_input = val_1
-            y_input = val_2
-        else:
-            y_input = val_1
-            g_input = val_2
-            
+        g_input, y_input = (val_1, val_2) if is_havlupan else (val_2, val_1)
         birim_desi, boyut_str, birim_kg = manuel_hesapla(secilen_model, g_input, y_input, m_adet)
-        toplam_desi = birim_desi * m_adet
-        
-        yeni_kayit = {
-            "Model": secilen_model,
-            "Ölçü (ExB)": f"{g_input} x {y_input}",
-            "Kutulu Ölçü": boyut_str,
-            "Adet": m_adet,
-            "Birim Desi": birim_desi,
-            "Toplam Desi": round(toplam_desi, 2),
-            "Toplam Ağırlık": f"{birim_kg:.2f} KG"
-        }
-        st.session_state['manuel_liste'].append(yeni_kayit)
+        st.session_state['manuel_liste'].append({
+            "Ürün": secilen_model, "Ölçü": f"{g_input} x {y_input}", "Kutulu Ölçü": boyut_str,
+            "Adet": m_adet, "Birim Desi": birim_desi, "Toplam Desi": round(birim_desi * m_adet, 2), "Toplam Ağırlık": f"{birim_kg:.2f} KG"
+        })
         st.success("Eklendi!")
 
     if st.session_state['manuel_liste']:
         st.divider()
         df_manuel = pd.DataFrame(st.session_state['manuel_liste'])
         st.dataframe(df_manuel, use_container_width=True)
+        t_adet, t_desi = df_manuel['Adet'].sum(), df_manuel['Toplam Desi'].sum()
+        try: t_kg = sum([float(x['Toplam Ağırlık'].replace(' KG','')) for x in st.session_state['manuel_liste']])
+        except: t_kg = 0
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Toplam Parça", t_adet); c2.metric("Genel Toplam Desi", f"{t_desi:.2f}"); c3.metric("Genel Toplam Ağırlık", f"{t_kg:.2f} KG")
         
-        t_adet = df_manuel['Adet'].sum()
-        t_desi = df_manuel['Toplam Desi'].sum()
+        m_etiketler, c = [], 1
+        for item in st.session_state['manuel_liste']:
+            for _ in range(item['Adet']):
+                m_etiketler.append({'sira_no': c, 'kisa_isim': item['Ürün'], 'boyut_str': item['Kutulu Ölçü'], 'desi_val': item['Birim Desi']})
+                c += 1
         
-        try:
-            t_kg = sum([float(x['Toplam Ağırlık'].replace(' KG','')) for x in st.session_state['manuel_liste']])
-        except:
-            t_kg = 0
-        
-        c_tot1, c_tot2, c_tot3 = st.columns(3)
-        c_tot1.metric("Toplam Parça", t_adet)
-        c_tot2.metric("Genel Toplam Desi", f"{t_desi:.2f}")
-        c_tot3.metric("Genel Toplam Ağırlık (Havlupan Dahil)", f"{t_kg:.2f} KG")
-        
-        if st.button("🗑️ Listeyi Temizle"):
-            st.session_state['manuel_liste'] = []
-            st.rerun()
+        cm1, cm2 = st.columns(2)
+        # Manuel liste için de adetli kargo fişi
+        cm1.download_button("📄 MANUEL KARGO FISI", create_cargo_pdf(t_desi, t_adet, musteri_data, df_manuel.to_dict('records')), "Manuel_Kargo.pdf", "application/pdf")
+        cm2.download_button("🏷️ MANUEL TERMAL ETIKET BAS", create_thermal_labels_3x6(m_etiketler, musteri_data, len(m_etiketler)), "Manuel_Etiketler.pdf", "application/pdf")
+        if st.button("🗑️ Listeyi Temizle"): st.session_state['manuel_liste'] = []; st.rerun()
