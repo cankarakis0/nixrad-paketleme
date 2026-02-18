@@ -239,27 +239,22 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ 8x10 (YAN DÖNDÜRÜLMÜŞ İÇERİK) TERMAL ETİKET FONKSİYONU
+# GÜNCELLENMİŞ TERMAL ETİKET (ÖDEME TİPİ EKLENDİ, ÖLÇÜ KALDIRILDI)
 # =============================================================================
 def create_thermal_labels_8x10_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
-    # Kagit boyutu fiziksel: 80mm Genislik x 100mm Yukseklik
     p_width, p_height = 80*mm, 100*mm
     c = canvas.Canvas(buffer, pagesize=(p_width, p_height))
     
     logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
     for p in etiket_listesi:
-        # Icerigi 90 derece donduruyoruz
-        # Koordinat sistemini yeni yatay alana (100x80 gibi) gore ayarliyoruz
         c.saveState()
         c.rotate(90)
-        c.translate(0, -p_width) # Koordinat merkezini kaydir
-        
-        # Simdi cizecegimiz alan: Genislik 100mm, Yukseklik 80mm
+        c.translate(0, -p_width)
         d_width, d_height = 100*mm, 80*mm
 
-        # 1. Logo Cizimi
+        # 1. Logo
         try:
             response = requests.get(logo_url)
             logo_img = ImageReader(io.BytesIO(response.content))
@@ -271,8 +266,8 @@ def create_thermal_labels_8x10_rotated(etiket_listesi, musteri_bilgileri, toplam
         alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI'))
         alici_tel = musteri_bilgileri.get('TELEFON', 'TELEFON YOK')
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
-        boyut_str = p.get('boyut_str', '')
         desi_text = f"DESI : {p['desi_val']}"
+        odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
 
         # 2. Gonderen Bilgileri
         c.setFont("Helvetica-Bold", 8)
@@ -299,12 +294,10 @@ def create_thermal_labels_8x10_rotated(etiket_listesi, musteri_bilgileri, toplam
         text_obj = c.beginText(22*mm, d_height - 40*mm)
         text_obj.setFont("Helvetica", 10)
         text_obj.setLeading(12)
-        
         words = alici_adres.split()
         line = ""
         for word in words:
-            if len(line + word) < 65:
-                line += word + " "
+            if len(line + word) < 65: line += word + " "
             else:
                 text_obj.textLine(line)
                 line = word + " "
@@ -313,16 +306,18 @@ def create_thermal_labels_8x10_rotated(etiket_listesi, musteri_bilgileri, toplam
             
         c.line(3*mm, d_height - 58*mm, d_width - 3*mm, d_height - 58*mm)
         
-        # 5. Telefon ve Urun Detay
+        # 5. Telefon ve Urun Detay (OLCU KALDIRILDI)
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 65*mm, f"TEL : {alici_tel}")
         
         c.setFont("Helvetica-Bold", 13)
         c.drawString(5*mm, d_height - 74*mm, urun_adi)
-        c.setFont("Helvetica", 11)
-        c.drawString(60*mm, d_height - 74*mm, f"OLCU: {boyut_str}")
+
+        # 6. Odeme Tipi (BUYUK VE KALIN)
+        c.setFont("Helvetica-Bold", 13)
+        c.drawRightString(d_width - 5*mm, d_height - 65*mm, odeme_tipi_val)
         
-        # 6. Desi ve Paket No
+        # 7. Desi ve Paket No
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 79*mm, desi_text)
         
@@ -348,17 +343,17 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.sidebar.header("Musteri Bilgileri")
-ad_soyad = st.sidebar.text_input("Adi Soyadi / Firma Adi")
-telefon = st.sidebar.text_input("Telefon Numarasi")
-adres = st.sidebar.text_area("Adres (Enter ile alt satira gecebilirsiniz)")
-odeme_tipi = st.sidebar.radio("Odeme Tipi", ["ALICI", "PESIN"], index=0)
+st.sidebar.header("Müşteri Bilgileri")
+ad_soyad = st.sidebar.text_input("Adı Soyadı / Firma Adı")
+telefon = st.sidebar.text_input("Telefon Numarası")
+adres = st.sidebar.text_area("Adres (Enter ile alt satıra geçebilirsiniz)")
+odeme_tipi = st.sidebar.radio("Ödeme Tipi", ["ALICI", "PEŞİN"], index=0)
 musteri_data = {'AD_SOYAD': ad_soyad, 'TELEFON': telefon, 'ADRES': adres, 'ODEME_TIPI': odeme_tipi}
 
 tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı"])
 
 with tab_dosya:
-    uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasini Yukleyin", type=['xls', 'xlsx', 'csv'])
+    uploaded_file = st.file_uploader("Dia Excel/CSV Dosyasını Yükleyin", type=['xls', 'xlsx', 'csv'])
 
     if 'ham_veri' not in st.session_state: st.session_state['ham_veri'] = []
     if 'malzeme_listesi' not in st.session_state: st.session_state['malzeme_listesi'] = {}
@@ -415,7 +410,7 @@ with tab_dosya:
                                         "Toplam Ağırlık": analiz['Toplam_Agirlik_Gosterim']
                                     })
                 else:
-                    st.error("Dosyada 'Stok Adı' basligi bulunamadi.")
+                    st.error("Dosyada 'Stok Adı' başlığı bulunamadı.")
             except Exception as e:
                 st.error(f"Hata: {e}")
 
@@ -483,9 +478,9 @@ with tab_dosya:
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
-        # GÜNCEL TERMAL BUTON (8x10 - YAN DÖNMÜŞ)
+        # GÜNCEL TERMAL BUTON (ÖDEME TİPLİ)
         pdf_thermal = create_thermal_labels_8x10_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (8x10 Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
