@@ -239,22 +239,31 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ 10x8 YATAY (LANDSCAPE) TERMAL ETİKET FONKSİYONU
+# GÜNCELLENMİŞ 8x10 (YAN DÖNDÜRÜLMÜŞ İÇERİK) TERMAL ETİKET FONKSİYONU
 # =============================================================================
-def create_thermal_labels_10x8_landscape(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
+def create_thermal_labels_8x10_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
-    # 100mm Genislik x 80mm Yukseklik (YATAY)
-    width, height = 100*mm, 80*mm
-    c = canvas.Canvas(buffer, pagesize=(width, height))
+    # Kagit boyutu fiziksel: 80mm Genislik x 100mm Yukseklik
+    p_width, p_height = 80*mm, 100*mm
+    c = canvas.Canvas(buffer, pagesize=(p_width, p_height))
     
     logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
     for p in etiket_listesi:
-        # 1. Logo Cizimi (Sol Ust)
+        # Icerigi 90 derece donduruyoruz
+        # Koordinat sistemini yeni yatay alana (100x80 gibi) gore ayarliyoruz
+        c.saveState()
+        c.rotate(90)
+        c.translate(0, -p_width) # Koordinat merkezini kaydir
+        
+        # Simdi cizecegimiz alan: Genislik 100mm, Yukseklik 80mm
+        d_width, d_height = 100*mm, 80*mm
+
+        # 1. Logo Cizimi
         try:
             response = requests.get(logo_url)
             logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 4*mm, height - 14*mm, width=25*mm, height=10*mm, mask='auto')
+            c.drawImage(logo_img, 4*mm, d_height - 14*mm, width=25*mm, height=10*mm, mask='auto')
         except: pass
 
         no_str = f"PAKET: {p['sira_no']} / {toplam_etiket_sayisi}"
@@ -265,30 +274,29 @@ def create_thermal_labels_10x8_landscape(etiket_listesi, musteri_bilgileri, topl
         boyut_str = p.get('boyut_str', '')
         desi_text = f"DESI : {p['desi_val']}"
 
-        # 2. Gonderen Bilgileri (Sag Ust)
+        # 2. Gonderen Bilgileri
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(35*mm, height - 5*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
+        c.drawString(35*mm, d_height - 5*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
         c.setFont("Helvetica", 7)
-        c.drawString(35*mm, height - 9*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN")
-        c.drawString(35*mm, height - 13*mm, "Tel: 0262 658 11 58")
+        c.drawString(35*mm, d_height - 9*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN")
+        c.drawString(35*mm, d_height - 13*mm, "Tel: 0262 658 11 58")
         
         c.setLineWidth(0.4)
-        c.line(3*mm, height - 17*mm, width - 3*mm, height - 17*mm)
+        c.line(3*mm, d_height - 17*mm, d_width - 3*mm, d_height - 17*mm)
         
-        # 3. Alici Musteri (Yatayda Genis Alan)
+        # 3. Alici Musteri
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(5*mm, height - 23*mm, "ALICI MUSTERI:")
+        c.drawString(5*mm, d_height - 23*mm, "ALICI MUSTERI:")
         c.setFont("Helvetica-Bold", 16)
-        c.drawString(5*mm, height - 31*mm, alici_ad[:55])
-        c.line(3*mm, height - 34*mm, width - 3*mm, height - 34*mm)
+        c.drawString(5*mm, d_height - 31*mm, alici_ad[:55])
+        c.line(3*mm, d_height - 34*mm, d_width - 3*mm, d_height - 34*mm)
         
-        # 4. Adres (Genisligine Yayilmis)
+        # 4. Adres
         c.setFont("Helvetica-Bold", 11)
-        c.drawString(5*mm, height - 40*mm, "ADRES :")
+        c.drawString(5*mm, d_height - 40*mm, "ADRES :")
         c.setFont("Helvetica", 10)
         
-        # Yatay formatta adres sarmalama
-        text_obj = c.beginText(22*mm, height - 40*mm)
+        text_obj = c.beginText(22*mm, d_height - 40*mm)
         text_obj.setFont("Helvetica", 10)
         text_obj.setLeading(12)
         
@@ -303,24 +311,25 @@ def create_thermal_labels_10x8_landscape(etiket_listesi, musteri_bilgileri, topl
         text_obj.textLine(line)
         c.drawText(text_obj)
             
-        c.line(3*mm, height - 58*mm, width - 3*mm, height - 58*mm)
+        c.line(3*mm, d_height - 58*mm, d_width - 3*mm, d_height - 58*mm)
         
-        # 5. Telefon ve Urun Detay (Yan Yana)
+        # 5. Telefon ve Urun Detay
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, height - 65*mm, f"TEL : {alici_tel}")
+        c.drawString(5*mm, d_height - 65*mm, f"TEL : {alici_tel}")
         
         c.setFont("Helvetica-Bold", 13)
-        c.drawString(5*mm, height - 74*mm, urun_adi)
+        c.drawString(5*mm, d_height - 74*mm, urun_adi)
         c.setFont("Helvetica", 11)
-        c.drawString(60*mm, height - 74*mm, f"OLCU: {boyut_str}")
+        c.drawString(60*mm, d_height - 74*mm, f"OLCU: {boyut_str}")
         
-        # 6. Desi ve Paket No (En Alt)
+        # 6. Desi ve Paket No
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, height - 82*mm, desi_text)
+        c.drawString(5*mm, d_height - 79*mm, desi_text)
         
         c.setFont("Helvetica-Bold", 15)
-        c.drawRightString(width - 5*mm, height - 82*mm, no_str)
+        c.drawRightString(d_width - 5*mm, d_height - 79*mm, no_str)
         
+        c.restoreState()
         c.showPage()
     
     c.save()
@@ -474,9 +483,9 @@ with tab_dosya:
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
-        # GÜNCEL YATAY TERMAL BUTON (10x8)
-        pdf_thermal = create_thermal_labels_10x8_landscape(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (10x8 Yatay)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        # GÜNCEL TERMAL BUTON (8x10 - YAN DÖNMÜŞ)
+        pdf_thermal = create_thermal_labels_8x10_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (8x10 Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
