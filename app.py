@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import io
+import requests # İnternet üzerinden logo çekmek için
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
@@ -9,6 +10,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfgen import canvas
+from reportlab.lib.utils import ImageReader
 
 # Matplotlib Backend Fix
 plt_backend = 'Agg'
@@ -156,67 +158,76 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (GÖRSELDEKİ TASARIM)
+# PDF FONKSİYONLARI (Link Logo + Görsel Tasarım)
 # =============================================================================
 
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
     width, height = 60*mm, 30*mm
     c = canvas.Canvas(buffer, pagesize=(width, height))
+    
+    # LOGO LINKI
+    logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
     for p in etiket_listesi:
+        # 1. Logo (Linkten Çekme)
+        try:
+            response = requests.get(logo_url)
+            logo_img = ImageReader(io.BytesIO(response.content))
+            c.drawImage(logo_img, 2*mm, height - 7.5*mm, width=12*mm, height=6*mm, mask='auto')
+        except:
+            pass
+
         # Veri Hazırlığı
         no_str = f"{p['sira_no']}/{toplam_etiket_sayisi}"
         gonderen = "NIXRAD / KARPAN DIZAYN A.S."
-        gonderen_adres = "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN"
-        gonderen_tel = "Tel: 0262 658 11 58"
+        gonderen_adres = "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN Tel: 0262 658 11 58"
         alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'] or "MUSTERI ADI")
         alici_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] or "ADRES GIRILMEDI")
         alici_tel = musteri_bilgileri['TELEFON'] or "TELEFON YOK"
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
         desi = f"DESI : {p['desi_val']}"
 
-        # --- ÇİZİM ---
-        # 1. GÖNDEREN BİLGİSİ (Üst Kısım)
+        # --- TASARIM ÇİZİMİ ---
+        # 2. Gönderen Başlık (Üst Orta)
         c.setFont("Helvetica-Bold", 4.5)
-        c.drawCentredString(width / 2.0, height - 3*mm, f"GONDEREN FIRMA: {gonderen}")
-        c.setFont("Helvetica", 4)
-        c.drawCentredString(width / 2.0, height - 5*mm, f"{gonderen_adres} {gonderen_tel}")
+        c.drawCentredString(width/2.0 + 3*mm, height - 3*mm, f"GONDEREN FIRMA: {gonderen}")
+        c.setFont("Helvetica", 3.5)
+        c.drawCentredString(width/2.0 + 3*mm, height - 5*mm, gonderen_adres)
         
-        # 2. ETİKET NUMARASI (Sağ Üst)
+        # 3. Sayfa No (Sağ Üst)
         c.setFont("Helvetica-Bold", 10)
         c.drawRightString(width - 2*mm, height - 7*mm, no_str)
 
-        # 3. ALICI BİLGİSİ
-        c.setLineWidth(0.1)
-        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm) # Üst çizgi
+        # Çizgiler
+        c.setLineWidth(0.15)
+        c.line(1*mm, height - 8*mm, width - 1*mm, height - 8*mm) # 1. Çizgi
         
-        c.setFont("Helvetica-Bold", 6)
+        # 4. Alıcı Satırı
+        c.setFont("Helvetica-Bold", 6.5)
         c.drawString(2*mm, height - 10.5*mm, f"ALICI MUSTERI: {alici_ad}")
+        c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm) # 2. Çizgi
         
-        c.line(1*mm, height - 11.5*mm, width - 1*mm, height - 11.5*mm) # Adres öncesi çizgi
+        # 5. Adres Satırı
+        c.setFont("Helvetica-Bold", 5.5)
+        addr_y = height - 14*mm
+        if len(alici_adres) > 55:
+            c.drawString(2*mm, addr_y, f"ADRES :{alici_adres[:55]}")
+            c.drawString(2*mm, addr_y - 2.5*mm, alici_adres[55:110])
+        else:
+            c.drawString(2*mm, addr_y, f"ADRES :{alici_adres}")
+            
+        c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm) # 3. Çizgi
         
-        # Adres (Otomatik Satır Atlatma Basit Mantık)
-        c.setFont("Helvetica-Bold", 5)
-        text_obj = c.beginText(2*mm, height - 14*mm)
-        text_obj.setLeading(6)
-        # Adresi parçalara böl (Basit sığdırma)
-        lines = [alici_adres[i:i+60] for i in range(0, len(alici_adres), 60)]
-        text_obj.textLine(f"ADRES :{lines[0]}")
-        for line in lines[1:2]: # Sadece 2 satır göster sığması için
-            text_obj.textLine(line)
-        c.drawText(text_obj)
-        
-        c.line(1*mm, height - 18.5*mm, width - 1*mm, height - 18.5*mm) # Tel öncesi çizgi
-        
-        c.setFont("Helvetica-Bold", 6)
+        # 6. Telefon Satırı
+        c.setFont("Helvetica-Bold", 6.5)
         c.drawString(2*mm, height - 21*mm, f"TEL : {alici_tel}")
+        c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm) # 4. Çizgi
         
-        c.line(1*mm, height - 22*mm, width - 1*mm, height - 22*mm) # Ürün öncesi çizgi
-        
-        # 4. ÜRÜN VE DESİ
+        # 7. Ürün ve Desi
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(2*mm, height - 25.5*mm, urun_adi)
         c.setFont("Helvetica-Bold", 7)
-        c.drawString(2*mm, height - 25*mm, urun_adi)
         c.drawString(2*mm, height - 28.5*mm, desi)
         
         c.showPage()
