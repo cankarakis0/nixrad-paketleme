@@ -5,7 +5,7 @@ import io
 import requests
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm, mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
@@ -158,7 +158,7 @@ def manuel_hesapla(model_secimi, genislik, yukseklik, adet=1):
     return desi, f"{k_en}x{k_boy}x{k_derin}cm", round(birim_kg * adet, 2)
 
 # =============================================================================
-# PDF FONKSİYONLARI (ADET SÜTUNU EKLENMİŞ KARGO FİŞİ)
+# PDF FONKSİYONLARI (TOPLAM DESİ SİYAH VE LOGO EKLENMİŞ KARGO FİŞİ)
 # =============================================================================
 
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
@@ -211,14 +211,22 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
     c.save(); buffer.seek(0); return buffer
 
 def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, ham_tablo_verisi):
-    """
-    Kargo Fişi - Adet sütunu eklenmiş versiyon.
-    ham_tablo_verisi: Düzenlenmiş tablodaki (Ürün, Adet, Ölçü, Birim Desi) verileri içeren liste.
-    """
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=1*cm, leftMargin=1*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
     styles = getSampleStyleSheet()
     style_normal = ParagraphStyle('n', parent=styles['Normal'], fontSize=10, leading=12)
     style_header = ParagraphStyle('h', parent=styles['Normal'], fontSize=14, leading=16, fontName='Helvetica-Bold', textColor=colors.darkred)
+    
+    logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
+    try:
+        response = requests.get(logo_url)
+        img_data = io.BytesIO(response.content)
+        logo = Image(img_data, width=4*cm, height=2*cm) # Logo boyutu ayarlanabilir
+        elements.append(logo)
+        elements.append(Spacer(1, 0.2*cm)) # Logo ile metin arasına boşluk
+    except Exception as e:
+        st.warning(f"Kargo fişine logo eklenemedi: {e}")
+        pass # Logo yüklenemezse devam et
+
     gonderen_info = [Paragraph("<b>GONDEREN FIRMA:</b>", style_normal), Paragraph("NIXRAD / KARPAN DIZAYN A.S.", style_header), Paragraph("Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN", style_normal), Paragraph("Tel: 0262 658 11 58", style_normal)]
     odeme_clean = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI'))
     odeme_info = [Paragraph("<b>ODEME TIPI:</b>", style_normal), Spacer(1, 0.5*cm), Paragraph(f"<b>{odeme_clean} ODEMELI</b>", ParagraphStyle('big', fontSize=14, alignment=TA_CENTER, fontName='Helvetica-Bold'))]
@@ -230,15 +238,23 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, ham_tab
     t_alici = Table([[alici_content]], colWidths=[19*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 2, colors.black), ('PADDING', (0,0), (-1,-1), 15)]))
     elements.append(t_alici); elements.append(Spacer(1, 0.5*cm))
     
-    # ADET SÜTUNU EKLENMİŞ TABLO
     pkt_data = [['Urun Adi', 'Adet', 'Olcu', 'Desi']] 
     for row in ham_tablo_verisi:
         pkt_data.append([tr_clean_for_pdf(row['Ürün']), str(row['Adet']), row['Ölçü'], str(row['Birim Desi'])])
     
     t_pkt = Table(pkt_data, colWidths=[10*cm, 2*cm, 5*cm, 2*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 0.5, colors.grey), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (1,0), (1,0), 'CENTER'), ('FONTSIZE', (0,0), (-1,-1), 9)]))
     elements.append(t_pkt); elements.append(Spacer(1, 0.5*cm))
+    
+    # TOPLAM DESİ'Yİ SİYAH RENKTE GÖSTER
     summary_data = [[f"TOPLAM KOLİ: {int(toplam_parca)}", f"TOPLAM DESİ: {proje_toplam_desi:.2f}"]]
-    t_sum = Table(summary_data, colWidths=[9.5*cm, 9.5*cm], style=TableStyle([('ALIGN', (0,0), (0,0), 'LEFT'), ('ALIGN', (1,0), (1,0), 'RIGHT'), ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'), ('FONTSIZE', (0,0), (-1,-1), 14), ('TEXTCOLOR', (1,0), (1,0), colors.blue), ('LINEBELOW', (0,0), (-1,-1), 2, colors.black)]))
+    t_sum = Table(summary_data, colWidths=[9.5*cm, 9.5*cm], style=TableStyle([
+        ('ALIGN', (0,0), (0,0), 'LEFT'), 
+        ('ALIGN', (1,0), (1,0), 'RIGHT'), 
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'), 
+        ('FONTSIZE', (0,0), (-1,-1), 14), 
+        ('TEXTCOLOR', (1,0), (1,0), colors.black), # TOPLAM DESİ SİYAH YAPILDI
+        ('LINEBELOW', (0,0), (-1,-1), 2, colors.black)
+    ]))
     elements.append(t_sum); elements.append(Spacer(1, 1*cm))
     warning_title = Paragraph("<b>DIKKAT KIRILIR !</b>", ParagraphStyle('WT', fontSize=26, alignment=TA_CENTER, textColor=colors.white, fontName='Helvetica-Bold'))
     warning_text = "SAYIN MUSTERIMIZ,<br/>GELEN KARGONUZUN BULUNDUGU PAKETLERIN SAGLAM VE PAKETLERDE EZIKLIK OLMADIGINI KONTROL EDEREK ALINIZ. EKSIK VEYA HASARLI MALZEME VARSA LUTFEN KARGO GOREVLISINE AYNI GUN TUTANAK TUTTURUNUZ."
@@ -315,62 +331,4 @@ with tab_dosya:
 
     if st.session_state['ham_veri']:
         ozet_alani = st.container()
-        edited_df = st.data_editor(pd.DataFrame(st.session_state['ham_veri']), num_rows="dynamic", use_container_width=True)
-        toplam_parca, p_desi, p_kg = edited_df["Adet"].sum(), (edited_df["Birim Desi"] * edited_df["Adet"]).sum(), edited_df["Toplam Ağırlık"].sum()
-        with ozet_alani:
-            st.subheader("📊 Proje Özeti")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("📦 Toplam Koli", int(toplam_parca)); c2.metric("📐 Toplam Desi", f"{p_desi:.2f}"); c3.metric("⚖️ Toplam Ağırlık", f"{p_kg:.1f} KG")
-            st.code(f"toplam desi {p_desi:.2f}  toplam ağırlık {p_kg:.1f}", language="text")
-        
-        edited_malz_df = st.data_editor(pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()]), num_rows="dynamic", use_container_width=True)
-        final_malz = dict(zip(edited_malz_df['Malzeme'], edited_malz_df['Adet']))
-        final_etiket, counter = [], 1
-        # Tablo verilerini PDF'e göndermek için hazırlıyoruz
-        final_tablo_verisi = edited_df.to_dict('records')
-        
-        for _, row in edited_df.iterrows():
-            for _ in range(int(row['Adet'])):
-                final_etiket.append({'sira_no': counter, 'kisa_isim': row['Ürün'], 'boyut_str': row['Ölçü'], 'desi_val': row['Birim Desi']})
-                counter += 1
-
-        st.divider()
-        col_p1, col_p2, col_p3 = st.columns(3)
-        # Kargo fişine düzenlenen tablo verisini gönderiyoruz
-        col_p1.download_button("📄 1. KARGO FISI (A4)", create_cargo_pdf(p_desi, toplam_parca, musteri_data, final_tablo_verisi), "Kargo_Fisi.pdf", "application/pdf", use_container_width=True)
-        col_p2.download_button("🏭 2. URETIM & ETIKET (A4)", create_production_pdf(final_malz, final_etiket, musteri_data), "Uretim_ve_Etiketler.pdf", "application/pdf", use_container_width=True)
-        col_p3.download_button("🏷️ 3. TERMAL ETIKET (3x6)", create_thermal_labels_3x6(final_etiket, musteri_data, len(final_etiket)), "Termal_Etiketler.pdf", "application/pdf", use_container_width=True)
-
-with tab_manuel:
-    st.header("🧮 Hızlı Desi Hesaplama Aracı")
-    if 'manuel_liste' not in st.session_state: st.session_state['manuel_liste'] = []
-    cm1, cm2, cm3, cm4 = st.columns(4)
-    with cm1:
-        secilen_model = st.selectbox("Model Seçin", ["Standart Radyatör", "Havlupan"] + [m.capitalize() for m in MODEL_DERINLIKLERI.keys() if m != 'livera'])
-        is_h = 'havlupan' in secilen_model.lower() or any(z in secilen_model.lower() for z in ZORUNLU_HAVLUPANLAR)
-    with cm2: v1 = st.number_input("Genişlik (cm)" if is_h else "Yükseklik (cm)", min_value=10, value=50 if is_h else 60)
-    with cm3: v2 = st.number_input("Yükseklik (cm)" if is_h else "Genişlik (cm)", min_value=10, value=70 if is_h else 100)
-    with cm4: m_adet = st.number_input("Adet", min_value=1, value=1)
-    if st.button("➕ Listeye Ekle", type="primary"):
-        gi, yi = (v1, v2) if is_h else (v2, v1)
-        bd, bs, bk = manuel_hesapla(secilen_model, gi, yi, m_adet)
-        st.session_state['manuel_liste'].append({"Ürün": secilen_model, "Adet": m_adet, "Ölçü": bs, "Birim Desi": bd, "Toplam Desi": round(bd*m_adet, 2), "Toplam Ağırlık": f"{bk:.2f} KG"})
-    
-    if st.session_state['manuel_liste']:
-        df_m = pd.DataFrame(st.session_state['manuel_liste'])
-        st.dataframe(df_m, use_container_width=True)
-        m_etiketler, c = [], 1
-        for item in st.session_state['manuel_liste']:
-            for _ in range(item['Adet']):
-                m_etiketler.append({'sira_no': c, 'kisa_isim': item['Ürün'], 'boyut_str': item['Ölçü'], 'desi_val': item['Birim Desi']})
-                c += 1
-        
-        col_m1, col_m2 = st.columns(2)
-        # Manuel liste için Kargo Fişi butonu (Adet sütunlu)
-        m_tablo_verisi = df_m.to_dict('records')
-        m_toplam_desi = df_m['Toplam Desi'].sum()
-        m_toplam_parca = df_m['Adet'].sum()
-        col_m1.download_button("📄 MANUEL KARGO FISI", create_cargo_pdf(m_toplam_desi, m_toplam_parca, musteri_data, m_tablo_verisi), "Manuel_Kargo_Fisi.pdf", "application/pdf")
-        col_m2.download_button("🏷️ MANUEL TERMAL ETIKET BAS", create_thermal_labels_3x6(m_etiketler, musteri_data, len(m_etiketler)), "Manuel_Etiketler.pdf", "application/pdf")
-        
-        if st.button("🗑️ Listeyi Temizle"): st.session_state['manuel_liste'] = []; st.rerun()
+        edited_df = st.data
