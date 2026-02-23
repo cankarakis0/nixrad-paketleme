@@ -229,29 +229,38 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
         sticker_data.append(row)
     if sticker_data: elements.append(Table(sticker_data, colWidths=[6.5*cm]*3, style=TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 15)])))
     doc.build(elements); buffer.seek(0); return buffer
+
+# =============================================================================
+# GÜNCELLENEN TERMAL ETİKET FONKSİYONU (ÇAKIŞMA DÜZELTİLDİ)
+# =============================================================================
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
     # 60mm Genislik x 30mm Yukseklik
     width, height = 60*mm, 30*mm
     c = canvas.Canvas(buffer, pagesize=(width, height))
     
-    # Logo URL (Nixrad Logo)
+    # Logo URL
     logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
+    
+    # Logo Önbelleği: Performans için bir kez indirilir
+    try:
+        logo_res = requests.get(logo_url, timeout=5)
+        logo_img = ImageReader(io.BytesIO(logo_res.content))
+    except:
+        logo_img = None
 
     # Dinamik Metin Stilleri
     styles = getSampleStyleSheet()
-    style_alici = ParagraphStyle('alici', fontSize=8.5, fontName='Helvetica-Bold', leading=10)
-    style_adres = ParagraphStyle('adres', fontSize=7.5, fontName='Helvetica', leading=9)
+    style_alici = ParagraphStyle('alici', fontSize=8.5, fontName='Helvetica-Bold', leading=9)
+    style_adres = ParagraphStyle('adres', fontSize=7.0, fontName='Helvetica', leading=8)
+    # Çakışmayı önleyen Ürün ismi stili (Genişlik sınırı ile)
+    style_urun = ParagraphStyle('urun', fontSize=7.0, fontName='Helvetica-Bold', leading=8)
 
     for p in etiket_listesi:
-        # --- 1. ÜST BÖLÜM (LOGO, GÖNDEREN & KOLI NO) ---
-        try:
-            response = requests.get(logo_url, timeout=5)
-            logo_img = ImageReader(io.BytesIO(response.content))
+        # --- 1. ÜST BÖLÜM (LOGO & GÖNDEREN) ---
+        if logo_img:
             c.drawImage(logo_img, 1*mm, height - 7*mm, width=13*mm, height=6*mm, mask='auto')
-        except: pass
 
-        # Gönderen Bilgileri
         c.setFont("Helvetica-Bold", 4.5)
         c.drawString(15*mm, height - 3.5*mm, "GONDEREN: NIXRAD / KARPAN DIZAYN A.S.")
         c.setFont("Helvetica", 4)
@@ -268,27 +277,35 @@ def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_s
         # --- 2. ORTA BÖLÜM (ALICI & ADRES) ---
         alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'ALICI BELIRTILMEDI')).upper()
         p_alici = Paragraph(f"ALICI: {alici_ad}", style_alici)
-        _, h1 = p_alici.wrap(width - 4*mm, 10*mm)
+        _, h1 = p_alici.wrap(width - 4*mm, 8*mm)
         p_alici.drawOn(c, 2*mm, height - 8.5*mm - h1)
 
         alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI')).upper()
         p_adres = Paragraph(alici_adres, style_adres)
-        _, h2 = p_adres.wrap(width - 4*mm, 15*mm)
-        p_adres.drawOn(c, 2*mm, height - 9*mm - h1 - h2)
+        _, h2 = p_adres.wrap(width - 4*mm, 12*mm)
+        p_adres.drawOn(c, 2*mm, height - 9.5*mm - h1 - h2)
 
         # Alt Ayırıcı Çizgi
-        c.line(1*mm, 8*mm, width - 1*mm, 8*mm)
+        c.line(1*mm, 8.5*mm, width - 1*mm, 8.5*mm)
 
         # --- 3. ALT BÖLÜM (TEL, URUN, ODEME & DESI) ---
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawString(2*mm, 5.8*mm, f"TEL: {musteri_bilgileri.get('TELEFON', '')}")
-        urun_adi = tr_clean_for_pdf(p['kisa_isim']).upper()
-        c.drawString(2*mm, 2.8*mm, f"URUN: {urun_adi}")
-
-        odeme = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')).upper()
-        c.drawRightString(width - 2*mm, 5.8*mm, f"{odeme} ODEME")
+        # Telefon satırı
+        c.setFont("Helvetica-Bold", 7.0)
+        c.drawString(2*mm, 6.2*mm, f"TEL: {musteri_bilgileri.get('TELEFON', '')}")
         
-        c.setFont("Helvetica-Bold", 10)
+        # Ürün İsmi: Genişliği 38mm ile sınırlı, DESİ alanına çarpmaz.
+        urun_adi = tr_clean_for_pdf(p['kisa_isim']).upper()
+        p_urun = Paragraph(f"URUN: {urun_adi}", style_urun)
+        _, hu = p_urun.wrap(38*mm, 7*mm) 
+        p_urun.drawOn(c, 2*mm, 1.5*mm)
+
+        # Ödeme Bilgisi (Sağ Taraf)
+        odeme = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')).upper()
+        c.setFont("Helvetica-Bold", 7.0)
+        c.drawRightString(width - 2*mm, 6.2*mm, f"{odeme} ODEME")
+        
+        # DESİ (Sağ Taraf - Alt)
+        c.setFont("Helvetica-Bold", 10.5)
         c.drawRightString(width - 2*mm, 1.5*mm, f"DESI: {p['desi_val']}")
 
         c.showPage()
@@ -378,12 +395,10 @@ with tab_dosya:
             c3.metric("⚖️ Toplam Ağırlık", f"{proje_toplam_agirlik:.1f} KG")
             st.code(f"toplam desi {proje_toplam_desi:.2f}  toplam ağırlık {proje_toplam_agirlik:.1f}", language="text")
 
-        # Malzeme Çek Listesi
         malz_df = pd.DataFrame([{"Malzeme": k, "Adet": v} for k,v in st.session_state['malzeme_listesi'].items()])
         edited_malz_df = st.data_editor(malz_df, key="malz_edit", num_rows="dynamic", use_container_width=True)
         final_malzeme_listesi = dict(zip(edited_malz_df['Malzeme'], edited_malz_df['Adet']))
 
-        # Etiket Listesi Hazırlama
         final_etiket_listesi = []
         global_counter = 1
         for index, row in edited_df.iterrows():
