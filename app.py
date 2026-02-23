@@ -229,10 +229,6 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
         sticker_data.append(row)
     if sticker_data: elements.append(Table(sticker_data, colWidths=[6.5*cm]*3, style=TableStyle([('VALIGN', (0,0), (-1,-1), 'TOP'), ('BOTTOMPADDING', (0,0), (-1,-1), 15)])))
     doc.build(elements); buffer.seek(0); return buffer
-
-# =============================================================================
-# GÜNCELLENEN TERMAL ETİKET FONKSİYONU (3x6)
-# =============================================================================
 def create_thermal_labels_3x6(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
     # 60mm Genislik x 30mm Yukseklik
