@@ -189,12 +189,11 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', '.....'))
     alici_tel = musteri_bilgileri.get('TELEFON', '.....')
     
-    # A4 Fis icin Adres ve Il Ilce birlestirme
+    # A4 Fis icin Adres ve Il/Ilce birlestirme
     clean_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'Adres Girilmedi'))
-    a4_il = tr_clean_for_pdf(musteri_bilgileri.get('IL', ''))
-    a4_ilce = tr_clean_for_pdf(musteri_bilgileri.get('ILCE', ''))
-    if a4_il or a4_ilce:
-        clean_adres += f"<br/><b>{a4_ilce} / {a4_il}</b>".strip(" /")
+    a4_il_ilce = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', ''))
+    if a4_il_ilce:
+        clean_adres += f"<br/><b>{a4_il_ilce.upper()}</b>"
 
     alici_content = [Paragraph("<b>ALICI MUSTERI:</b>", style_normal), Paragraph(f"<b>{alici_ad}</b>", ParagraphStyle('alici_ad_huge', fontSize=22, leading=26, fontName='Helvetica-Bold', spaceBefore=6, spaceAfter=12)), Paragraph(f"<b>Tel:</b> {alici_tel}", ParagraphStyle('tel_big', fontSize=12, leading=14)), Spacer(1, 0.5*cm), Paragraph(f"<b>ADRES:</b><br/>{clean_adres}", ParagraphStyle('adres_style_big', fontSize=15, leading=20))]
     t_alici = Table([[alici_content]], colWidths=[19*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 2, colors.black), ('PADDING', (0,0), (-1,-1), 15)]))
@@ -276,10 +275,8 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         desi_text = f"DESI : {p['desi_val']}"
         odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
         
-        # İl ve İlçe bilgilerini hazırlama
-        alici_il = tr_clean_for_pdf(musteri_bilgileri.get('IL', ''))
-        alici_ilce = tr_clean_for_pdf(musteri_bilgileri.get('ILCE', ''))
-        il_ilce_metni = f"{alici_ilce} / {alici_il}".strip(" /").upper()
+        # İl / İlçe bilgisini hazırlama
+        il_ilce_metni = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', '')).upper()
 
         # 2. Gonderen Bilgileri
         c.setFont("Helvetica-Bold", 8)
@@ -333,7 +330,7 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
             text_obj.textLine(line)
         c.drawText(text_obj)
         
-        # --- İL VE İLÇEYİ KALIN YAZDIRMA ---
+        # --- İL / İLÇEYİ KALIN YAZDIRMA ---
         kalan_y = text_obj.getY() 
         if il_ilce_metni:
             c.setFont("Helvetica-Bold", adres_font + 3) 
@@ -383,13 +380,9 @@ st.sidebar.header("Müşteri Bilgileri")
 ad_soyad = st.sidebar.text_input("Adı Soyadı / Firma Adı")
 telefon = st.sidebar.text_input("Telefon Numarası")
 
-# Adres kısmını İl / İlçe olarak ayırdık
+# Adres ve İl/İlçe girişi (Tek Kutuya Düşürüldü)
 adres = st.sidebar.text_area("Açık Adres (İl ve İlçe Hariç)")
-col_ilce, col_il = st.sidebar.columns(2)
-with col_ilce:
-    ilce = st.text_input("İlçe")
-with col_il:
-    il = st.text_input("İl")
+il_ilce = st.sidebar.text_input("İl / İlçe")
 
 odeme_tipi = st.sidebar.radio("Ödeme Tipi", ["ALICI", "PEŞİN"], index=0)
 
@@ -397,8 +390,7 @@ musteri_data = {
     'AD_SOYAD': ad_soyad, 
     'TELEFON': telefon, 
     'ADRES': adres, 
-    'ILCE': ilce,
-    'IL': il,
+    'IL_ILCE': il_ilce,
     'ODEME_TIPI': odeme_tipi
 }
 
@@ -532,7 +524,7 @@ with tab_dosya:
 
         # GÜNCEL TERMAL BUTON
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
