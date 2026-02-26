@@ -65,7 +65,6 @@ def tr_lower(text): return text.replace('İ', 'i').replace('I', 'ı').lower()
 def tr_upper(text): return text.replace('i', 'İ').replace('ı', 'I').upper()
 
 def isim_kisalt(stok_adi):
-    # Ürün adının tamamını olduğu gibi büyük harfle ve PDF'e uygun formatta alıyoruz
     return tr_clean_for_pdf(tr_upper(stok_adi).strip())
 
 def get_standart_paket_icerigi(tip, model_adi):
@@ -235,7 +234,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (Alan Tasarrufu + Kargo Uyarı Notu)
+# GÜNCELLENMİŞ TERMAL ETİKET (Sabit Üst Alan + TR Karakter Düzeltmesi)
 # =============================================================================
 def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
@@ -254,7 +253,7 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         try:
             response = requests.get(logo_url)
             logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 4*mm, d_height - 12*mm, width=25*mm, height=10*mm, mask='auto')
+            c.drawImage(logo_img, 4*mm, d_height - 12*mm, width=28*mm, height=11*mm, mask='auto')
         except: pass
 
         no_str = f"PAKET: {p['sira_no']} / {toplam_etiket_sayisi}"
@@ -266,12 +265,12 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
         il_ilce_metni = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', '')).upper()
 
-        # 2. Gonderen Bilgileri (Yukarida daha sıkı hizalandı)
+        # 2. Gonderen Bilgileri (Sabit, Düzenli ve Tek Satır Formunda)
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(45*mm, d_height - 4*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
+        c.drawString(38*mm, d_height - 5*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
         c.setFont("Helvetica", 7)
-        c.drawString(45*mm, d_height - 7.5*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN")
-        c.drawString(45*mm, d_height - 11*mm, "Tel: 0262 658 11 58")
+        # Adres ve Telefon yan yana konularak tasarimdaki gibi sabitlendi
+        c.drawString(38*mm, d_height - 9*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN   Tel: 0262 658 11 58")
         
         c.setLineWidth(0.4)
         c.line(3*mm, d_height - 14*mm, d_width - 3*mm, d_height - 14*mm)
@@ -348,13 +347,13 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         c.setFont("Helvetica-Bold", 15)
         c.drawRightString(d_width - 5*mm, d_height - 69*mm, no_str)
         
-        # --- YENİ: Kargo Teslimat Uyarı Notu ---
-        # Araya ince ayirici bir cizgi koyuyoruz
+        # --- YENİ: Kargo Teslimat Uyarı Notu (TÜRKÇE KARAKTER DÜZELTMELİ) ---
         c.setLineWidth(0.2)
         c.line(3*mm, d_height - 72.5*mm, d_width - 3*mm, d_height - 72.5*mm)
         
-        uyari_1 = "LÜTFEN KARGONUZU TESLİM ALIRKEN PAKETİ KONTROL EDİNİZ. HASAR VEYA EKSİK ÜRÜN VARSA"
-        uyari_2 = "AYNI GÜN KARGO GÖREVLİSİNE TUTANAK TUTTURUNUZ. AKSİ HALDE SORUMLULUK ALICIYA AİTTİR."
+        uyari_1 = tr_clean_for_pdf("LÜTFEN KARGONUZU TESLİM ALIRKEN PAKETİ KONTROL EDİNİZ. HASAR VEYA EKSİK ÜRÜN VARSA")
+        uyari_2 = tr_clean_for_pdf("AYNI GÜN KARGO GÖREVLİSİNE TUTANAK TUTTURUNUZ. AKSİ HALDE SORUMLULUK ALICIYA AİTTİR.")
+        
         c.setFont("Helvetica-Bold", 5.5)
         c.drawCentredString(d_width / 2.0, d_height - 75.5*mm, uyari_1)
         c.drawCentredString(d_width / 2.0, d_height - 78*mm, uyari_2)
@@ -524,7 +523,7 @@ with tab_dosya:
         col_pdf2.download_button(label="🏭 2. ÜRETİM & ETİKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
