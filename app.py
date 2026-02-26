@@ -48,7 +48,8 @@ HAVLUPAN_BORU_CETVELI = {
     'kumbaros': {70: 5, 100: 7, 120: 8, 150: 10}
 }
 
-RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI"]
+# Renk listesi genişletildi ki her rengi garanti yakalasın
+RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI", "BRONZ", "INOX", "MAT SIYAH", "MAT BEYAZ", "RAL"]
 
 # =============================================================================
 # 2. YARDIMCI FONKSİYONLAR
@@ -189,7 +190,6 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', '.....'))
     alici_tel = musteri_bilgileri.get('TELEFON', '.....')
     
-    # A4 Fis icin Adres ve Il/Ilce birlestirme
     clean_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'Adres Girilmedi'))
     a4_il_ilce = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', ''))
     if a4_il_ilce:
@@ -245,7 +245,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (<br/> Düzeltmesi ve Dinamik Orantılı İl/İlçe)
+# GÜNCELLENMİŞ TERMAL ETİKET (Tam Dinamik Ölçekleme ve <br/> Düzeltmesi)
 # =============================================================================
 def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
@@ -269,16 +269,11 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
 
         no_str = f"PAKET: {p['sira_no']} / {toplam_etiket_sayisi}"
         alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'MUSTERI ADI'))
-        
-        # HTML <br/> etiketlerini bosluga ceviriyoruz ki PDF canvas'ta yazi olarak cikmasin
         alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI')).replace('<br/>', ' ')
-        
         alici_tel = musteri_bilgileri.get('TELEFON', 'TELEFON YOK')
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
         desi_text = f"DESI : {p['desi_val']}"
         odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
-        
-        # İl / İlçe bilgisini hazırlama
         il_ilce_metni = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', '')).upper()
 
         # 2. Gonderen Bilgileri
@@ -291,27 +286,27 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         c.setLineWidth(0.4)
         c.line(3*mm, d_height - 17*mm, d_width - 3*mm, d_height - 17*mm)
         
-        # 3. Alici Musteri
+        # 3. Alici Musteri - TAM DINAMIK (Daima satıra sığacak şekilde font küçülür)
         c.setFont("Helvetica-Bold", 10)
         c.drawString(5*mm, d_height - 23*mm, "ALICI MUSTERI:")
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(5*mm, d_height - 31*mm, alici_ad[:70])
+        
+        ad_font = 17 # Baslangic buyuklugu
+        while c.stringWidth(alici_ad, "Helvetica-Bold", ad_font) > (d_width - 10*mm) and ad_font > 7:
+            ad_font -= 1
+        
+        c.setFont("Helvetica-Bold", ad_font)
+        c.drawString(5*mm, d_height - 31*mm, alici_ad)
         c.line(3*mm, d_height - 34*mm, d_width - 3*mm, d_height - 34*mm)
         
-        # 4. Adres (Dinamik Font ve İlçe/İl Orantili Yazdırma)
+        # 4. Adres 
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 40*mm, "ADRES :")
         
         adres_uzunluk = len(alici_adres)
-        
-        if adres_uzunluk <= 70:
-            adres_font, adres_lead = 14, 16
-        elif adres_uzunluk <= 110:
-            adres_font, adres_lead = 12, 14
-        elif adres_uzunluk <= 160:
-            adres_font, adres_lead = 10, 12
-        else:
-            adres_font, adres_lead = 8, 10
+        if adres_uzunluk <= 70: adres_font, adres_lead = 14, 16
+        elif adres_uzunluk <= 110: adres_font, adres_lead = 12, 14
+        elif adres_uzunluk <= 160: adres_font, adres_lead = 10, 12
+        else: adres_font, adres_lead = 8, 10
             
         text_obj = c.beginText(24*mm, d_height - 40*mm)
         text_obj.setFont("Helvetica", adres_font)
@@ -333,21 +328,25 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
             text_obj.textLine(line)
         c.drawText(text_obj)
         
-        # --- İL / İLÇEYİ ORANTILI VE KALIN YAZDIRMA ---
+        # İl / İlçe Orantılı Yazdırma (Adres fontundan 1 tık büyük)
         kalan_y = text_obj.getY() 
         if il_ilce_metni:
-            il_ilce_font = adres_font + 1 # Oran orantı: Adres fontundan sadece 1 tık büyük
+            il_ilce_font = adres_font + 1 
             c.setFont("Helvetica-Bold", il_ilce_font) 
             c.drawString(24*mm, kalan_y - 3*mm, il_ilce_metni)
-        # ----------------------------------------------
             
         c.line(3*mm, d_height - 58*mm, d_width - 3*mm, d_height - 58*mm)
         
-        # 5. Telefon ve Urun Detay
+        # 5. Telefon
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 65*mm, f"TEL : {alici_tel}")
         
-        c.setFont("Helvetica-Bold", 13)
+        # --- Ürün Adı (Model, Boyut, Renk) - TAM DINAMIK ---
+        urun_font = 15 # Baslangic buyuklugu
+        while c.stringWidth(urun_adi, "Helvetica-Bold", urun_font) > (d_width - 10*mm) and urun_font > 7:
+            urun_font -= 1
+            
+        c.setFont("Helvetica-Bold", urun_font)
         c.drawString(5*mm, d_height - 74*mm, urun_adi)
 
         # 6. Odeme Tipi
@@ -356,10 +355,10 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         
         # 7. Desi ve Paket No
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, d_height - 79*mm, desi_text)
+        c.drawString(5*mm, d_height - 80*mm, desi_text)
         
         c.setFont("Helvetica-Bold", 15)
-        c.drawRightString(d_width - 5*mm, d_height - 79*mm, no_str)
+        c.drawRightString(d_width - 5*mm, d_height - 80*mm, no_str)
         
         c.restoreState()
         c.showPage()
@@ -384,7 +383,6 @@ st.sidebar.header("Müşteri Bilgileri")
 ad_soyad = st.sidebar.text_input("Adı Soyadı / Firma Adı")
 telefon = st.sidebar.text_input("Telefon Numarası")
 
-# Adres ve İl/İlçe girişi (Tek Kutuya Düşürüldü)
 adres = st.sidebar.text_area("Açık Adres (İl ve İlçe Hariç)")
 il_ilce = st.sidebar.text_input("İl / İlçe")
 
@@ -526,9 +524,8 @@ with tab_dosya:
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. ÜRETİM & ETİKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
-        # GÜNCEL TERMAL BUTON (8x12 YAN, DİNAMİK ADRESLİ ve <br/> ÇÖZÜMLÜ)
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
