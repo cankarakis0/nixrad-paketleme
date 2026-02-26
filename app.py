@@ -239,7 +239,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (8x12 Fiziksel, Dinamik Adres Fontu)
+# GÜNCELLENMİŞ TERMAL ETİKET (8x12 Fiziksel, Dinamik Adres Fontu İyileştirildi)
 # =============================================================================
 def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
@@ -286,47 +286,52 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         c.drawString(5*mm, d_height - 31*mm, alici_ad[:70])
         c.line(3*mm, d_height - 34*mm, d_width - 3*mm, d_height - 34*mm)
         
-        # 4. Adres (Dinamik Font ve Satir Hesaplama)
-        c.setFont("Helvetica-Bold", 11)
+        # 4. Adres (Dinamik Font ve Satir Hesaplama Geliştirildi)
+        c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 40*mm, "ADRES :")
         
         adres_uzunluk = len(alici_adres)
-        if adres_uzunluk < 60:
-            adres_font, adres_lead = 11, 13
-        elif adres_uzunluk < 120:
+        
+        # Sinirlar cok genisletildi, kisa adresler artik devasa boyutlarda cikacak
+        if adres_uzunluk <= 70:
+            adres_font, adres_lead = 14, 16
+        elif adres_uzunluk <= 110:
+            adres_font, adres_lead = 12, 14
+        elif adres_uzunluk <= 160:
             adres_font, adres_lead = 10, 12
-        elif adres_uzunluk < 180:
-            adres_font, adres_lead = 9, 11
         else:
             adres_font, adres_lead = 8, 10
             
-        text_obj = c.beginText(22*mm, d_height - 40*mm)
+        text_obj = c.beginText(24*mm, d_height - 40*mm)
         text_obj.setFont("Helvetica", adres_font)
         text_obj.setLeading(adres_lead)
         
-        # Yazinin tasmasini onlemek icin dinamik genislik hesabi
-        max_text_width = d_width - 25*mm 
+        max_text_width = d_width - 27*mm 
         words = alici_adres.split()
         line = ""
         for word in words:
             if c.stringWidth(line + word, "Helvetica", adres_font) < max_text_width:
                 line += word + " "
             else:
-                text_obj.textLine(line)
-                line = word + " "
-        text_obj.textLine(line)
+                if line == "": 
+                    text_obj.textLine(word)
+                else:
+                    text_obj.textLine(line)
+                    line = word + " "
+        if line:
+            text_obj.textLine(line)
         c.drawText(text_obj)
             
         c.line(3*mm, d_height - 58*mm, d_width - 3*mm, d_height - 58*mm)
         
-        # 5. Telefon ve Urun Detay (OLCU KALDIRILDI)
+        # 5. Telefon ve Urun Detay
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 65*mm, f"TEL : {alici_tel}")
         
         c.setFont("Helvetica-Bold", 13)
         c.drawString(5*mm, d_height - 74*mm, urun_adi)
 
-        # 6. Odeme Tipi (BUYUK VE KALIN)
+        # 6. Odeme Tipi
         c.setFont("Helvetica-Bold", 13)
         c.drawRightString(d_width - 5*mm, d_height - 65*mm, odeme_tipi_val)
         
@@ -491,7 +496,6 @@ with tab_dosya:
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
-        # GÜNCEL TERMAL BUTON (8x12 YAN, DİNAMİK ADRESLİ)
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
         col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
