@@ -48,7 +48,6 @@ HAVLUPAN_BORU_CETVELI = {
     'kumbaros': {70: 5, 100: 7, 120: 8, 150: 10}
 }
 
-# Renk listesi genişletildi ki her rengi garanti yakalasın
 RENKLER = ["BEYAZ", "ANTRASIT", "SIYAH", "KROM", "ALTIN", "GRI", "KIRMIZI", "BRONZ", "INOX", "MAT SIYAH", "MAT BEYAZ", "RAL"]
 
 # =============================================================================
@@ -66,17 +65,8 @@ def tr_lower(text): return text.replace('İ', 'i').replace('I', 'ı').lower()
 def tr_upper(text): return text.replace('i', 'İ').replace('ı', 'I').upper()
 
 def isim_kisalt(stok_adi):
-    stok_upper = tr_upper(stok_adi)
-    model_adi = "RADYATOR"
-    for m in MODEL_DERINLIKLERI.keys():
-        if tr_upper(m) in stok_upper: model_adi = tr_upper(m); break
-    boyut = ""
-    boyut_match = re.search(r'(\d+)\s*[/xX]\s*(\d+)', stok_adi)
-    if boyut_match: boyut = f"{boyut_match.group(1)}/{boyut_match.group(2)}"
-    renk = ""
-    for r in RENKLER: 
-        if r in stok_upper: renk = r; break
-    return tr_clean_for_pdf(f"{model_adi} {boyut} {renk}".strip())
+    # Ürün adının tamamını olduğu gibi büyük harfle ve PDF'e uygun formatta alıyoruz
+    return tr_clean_for_pdf(tr_upper(stok_adi).strip())
 
 def get_standart_paket_icerigi(tip, model_adi):
     amb = "GENEL AMBALAJLAMA (Karton+ balon + Strec)"
@@ -271,7 +261,10 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'MUSTERI ADI'))
         alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI')).replace('<br/>', ' ')
         alici_tel = musteri_bilgileri.get('TELEFON', 'TELEFON YOK')
+        
+        # Ürün adı artık Excel'deki orijinal uzun ismi barındırıyor
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
+        
         desi_text = f"DESI : {p['desi_val']}"
         odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
         il_ilce_metni = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', '')).upper()
@@ -341,9 +334,10 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 65*mm, f"TEL : {alici_tel}")
         
-        # --- Ürün Adı (Model, Boyut, Renk) - TAM DINAMIK ---
+        # --- Ürün Adı (Uzun Stok İsimleri İçin Tam Dinamik) ---
         urun_font = 15 # Baslangic buyuklugu
-        while c.stringWidth(urun_adi, "Helvetica-Bold", urun_font) > (d_width - 10*mm) and urun_font > 7:
+        # Eğer ürün adı çok uzunsa sığana kadar fontu 6'ya kadar düşürür
+        while c.stringWidth(urun_adi, "Helvetica-Bold", urun_font) > (d_width - 10*mm) and urun_font > 6:
             urun_font -= 1
             
         c.setFont("Helvetica-Bold", urun_font)
