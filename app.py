@@ -239,7 +239,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (8x12 Fiziksel, İçerik 90 Derece Yatay)
+# GÜNCELLENMİŞ TERMAL ETİKET (8x12 Fiziksel, Dinamik Adres Fontu)
 # =============================================================================
 def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
@@ -286,18 +286,31 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         c.drawString(5*mm, d_height - 31*mm, alici_ad[:70])
         c.line(3*mm, d_height - 34*mm, d_width - 3*mm, d_height - 34*mm)
         
-        # 4. Adres
+        # 4. Adres (Dinamik Font ve Satir Hesaplama)
         c.setFont("Helvetica-Bold", 11)
         c.drawString(5*mm, d_height - 40*mm, "ADRES :")
-        c.setFont("Helvetica", 10)
         
+        adres_uzunluk = len(alici_adres)
+        if adres_uzunluk < 60:
+            adres_font, adres_lead = 11, 13
+        elif adres_uzunluk < 120:
+            adres_font, adres_lead = 10, 12
+        elif adres_uzunluk < 180:
+            adres_font, adres_lead = 9, 11
+        else:
+            adres_font, adres_lead = 8, 10
+            
         text_obj = c.beginText(22*mm, d_height - 40*mm)
-        text_obj.setFont("Helvetica", 10)
-        text_obj.setLeading(12)
+        text_obj.setFont("Helvetica", adres_font)
+        text_obj.setLeading(adres_lead)
+        
+        # Yazinin tasmasini onlemek icin dinamik genislik hesabi
+        max_text_width = d_width - 25*mm 
         words = alici_adres.split()
         line = ""
         for word in words:
-            if len(line + word) < 85: line += word + " "
+            if c.stringWidth(line + word, "Helvetica", adres_font) < max_text_width:
+                line += word + " "
             else:
                 text_obj.textLine(line)
                 line = word + " "
@@ -478,9 +491,9 @@ with tab_dosya:
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
-        # GÜNCEL TERMAL BUTON (8x12 YAN)
+        # GÜNCEL TERMAL BUTON (8x12 YAN, DİNAMİK ADRESLİ)
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (8x12 Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
