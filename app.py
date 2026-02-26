@@ -186,9 +186,16 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
     odeme_info = [Paragraph("<b>ODEME TIPI:</b>", style_normal), Spacer(1, 0.5*cm), Paragraph(f"<b>{odeme_clean} ODEMELI</b>", ParagraphStyle('big', fontSize=14, alignment=TA_CENTER, fontName='Helvetica-Bold'))]
     t_header = Table([[gonderen_info, odeme_info]], colWidths=[13*cm, 6*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('GRID', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'TOP'), ('PADDING', (0,0), (-1,-1), 8), ('BACKGROUND', (0,0), (-1,-1), colors.whitesmoke)]))
     elements.append(t_header); elements.append(Spacer(1, 0.5*cm))
-    alici_ad = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD']) if musteri_bilgileri['AD_SOYAD'] else "....."
-    alici_tel = musteri_bilgileri['TELEFON'] if musteri_bilgileri['TELEFON'] else "....."
-    clean_adres = tr_clean_for_pdf(musteri_bilgileri['ADRES'] if musteri_bilgileri['ADRES'] else "Adres Girilmedi")
+    alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', '.....'))
+    alici_tel = musteri_bilgileri.get('TELEFON', '.....')
+    
+    # A4 Fis icin Adres ve Il Ilce birlestirme
+    clean_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'Adres Girilmedi'))
+    a4_il = tr_clean_for_pdf(musteri_bilgileri.get('IL', ''))
+    a4_ilce = tr_clean_for_pdf(musteri_bilgileri.get('ILCE', ''))
+    if a4_il or a4_ilce:
+        clean_adres += f"<br/><b>{a4_ilce} / {a4_il}</b>".strip(" /")
+
     alici_content = [Paragraph("<b>ALICI MUSTERI:</b>", style_normal), Paragraph(f"<b>{alici_ad}</b>", ParagraphStyle('alici_ad_huge', fontSize=22, leading=26, fontName='Helvetica-Bold', spaceBefore=6, spaceAfter=12)), Paragraph(f"<b>Tel:</b> {alici_tel}", ParagraphStyle('tel_big', fontSize=12, leading=14)), Spacer(1, 0.5*cm), Paragraph(f"<b>ADRES:</b><br/>{clean_adres}", ParagraphStyle('adres_style_big', fontSize=15, leading=20))]
     t_alici = Table([[alici_content]], colWidths=[19*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 2, colors.black), ('PADDING', (0,0), (-1,-1), 15)]))
     elements.append(t_alici); elements.append(Spacer(1, 0.5*cm))
@@ -212,7 +219,7 @@ def create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_bilgileri, etiket_
 def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     buffer = io.BytesIO(); doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=0.5*cm, leftMargin=0.5*cm, topMargin=1*cm, bottomMargin=1*cm); elements = []
     styles = getSampleStyleSheet()
-    cust_name = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD']) if musteri_bilgileri['AD_SOYAD'] else "Isim Girilmedi"
+    cust_name = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'Isim Girilmedi'))
     elements.append(Paragraph(f"URETIM & PAKETLEME EMRI - {cust_name}", ParagraphStyle('Title', fontSize=16, alignment=TA_CENTER, fontName='Helvetica-Bold', spaceAfter=15)))
     data = [['MALZEME ADI', 'ADET', 'KONTROL']] + [[Paragraph(tr_clean_for_pdf(m), ParagraphStyle('malz_style', fontSize=10, fontName='Helvetica')), f"{int(v)}" if v%1==0 else f"{v:.1f}", "___"] for m, v in tum_malzemeler.items()]
     t = Table(data, colWidths=[14*cm, 2*cm, 3*cm], style=TableStyle([('GRID', (0,0), (-1,-1), 1, colors.black), ('BACKGROUND', (0,0), (-1,0), colors.lightgrey), ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'), ('ALIGN', (1,0), (-1,-1), 'CENTER'), ('ALIGN', (2,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('PADDING', (0,0), (-1,-1), 6)]))
@@ -227,8 +234,8 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     
     for p in etiket_listesi:
         isim, boyut, desi, no = tr_clean_for_pdf(p['kisa_isim']), p['boyut_str'], str(p['desi_val']), str(p['sira_no'])
-        cust = tr_clean_for_pdf(musteri_bilgileri['AD_SOYAD'][:25]) if musteri_bilgileri['AD_SOYAD'] else ""
-        content = [[Paragraph(f"<b>#{no}</b>", style_num)], [Paragraph(f"<b>{isim}</b>", ParagraphStyle('C', alignment=TA_CENTER, fontSize=9))], [Paragraph(f"{boyut}", ParagraphStyle('C', alignment=TA_CENTER, fontSize=8))], [Spacer(1, 0.2*cm)], [Paragraph(f"<b>Desi: {desi}</b>", ParagraphStyle('L', alignment=TA_LEFT, fontSize=11))], [Paragraph(f"<b>{cust}</b>", style_cust)]]
+        cust_short = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', '')[:25])
+        content = [[Paragraph(f"<b>#{no}</b>", style_num)], [Paragraph(f"<b>{isim}</b>", ParagraphStyle('C', alignment=TA_CENTER, fontSize=9))], [Paragraph(f"{boyut}", ParagraphStyle('C', alignment=TA_CENTER, fontSize=8))], [Spacer(1, 0.2*cm)], [Paragraph(f"<b>Desi: {desi}</b>", ParagraphStyle('L', alignment=TA_LEFT, fontSize=11))], [Paragraph(f"<b>{cust_short}</b>", style_cust)]]
         box = Table(content, colWidths=[5.8*cm], rowHeights=[0.8*cm, 1.2*cm, 0.5*cm, 0.5*cm, 0.8*cm, 0.5*cm], style=TableStyle([('BOX', (0,0), (-1,-1), 1, colors.black), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('TOPPADDING', (0,0), (-1,-1), 0), ('BOTTOMPADDING', (0,0), (-1,-1), 0)]))
         row.append(box)
         if len(row)==3: sticker_data.append(row); row = []
@@ -239,7 +246,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (8x12 Fiziksel, Dinamik Adres Fontu İyileştirildi)
+# GÜNCELLENMİŞ TERMAL ETİKET (İl/İlçe BOLD ve Dinamik Yazdırma)
 # =============================================================================
 def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
@@ -268,6 +275,11 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
         desi_text = f"DESI : {p['desi_val']}"
         odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
+        
+        # İl ve İlçe bilgilerini hazırlama
+        alici_il = tr_clean_for_pdf(musteri_bilgileri.get('IL', ''))
+        alici_ilce = tr_clean_for_pdf(musteri_bilgileri.get('ILCE', ''))
+        il_ilce_metni = f"{alici_ilce} / {alici_il}".strip(" /").upper()
 
         # 2. Gonderen Bilgileri
         c.setFont("Helvetica-Bold", 8)
@@ -286,13 +298,12 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         c.drawString(5*mm, d_height - 31*mm, alici_ad[:70])
         c.line(3*mm, d_height - 34*mm, d_width - 3*mm, d_height - 34*mm)
         
-        # 4. Adres (Dinamik Font ve Satir Hesaplama Geliştirildi)
+        # 4. Adres (Dinamik Font ve İlçe/İl Kalın Yazdırma)
         c.setFont("Helvetica-Bold", 12)
         c.drawString(5*mm, d_height - 40*mm, "ADRES :")
         
         adres_uzunluk = len(alici_adres)
         
-        # Sinirlar cok genisletildi, kisa adresler artik devasa boyutlarda cikacak
         if adres_uzunluk <= 70:
             adres_font, adres_lead = 14, 16
         elif adres_uzunluk <= 110:
@@ -321,6 +332,13 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         if line:
             text_obj.textLine(line)
         c.drawText(text_obj)
+        
+        # --- İL VE İLÇEYİ KALIN YAZDIRMA ---
+        kalan_y = text_obj.getY() 
+        if il_ilce_metni:
+            c.setFont("Helvetica-Bold", adres_font + 3) 
+            c.drawString(24*mm, kalan_y - 2*mm, il_ilce_metni)
+        # -----------------------------------
             
         c.line(3*mm, d_height - 58*mm, d_width - 3*mm, d_height - 58*mm)
         
@@ -364,9 +382,25 @@ st.markdown(
 st.sidebar.header("Müşteri Bilgileri")
 ad_soyad = st.sidebar.text_input("Adı Soyadı / Firma Adı")
 telefon = st.sidebar.text_input("Telefon Numarası")
-adres = st.sidebar.text_area("Adres (Enter ile alt satıra geçebilirsiniz)")
+
+# Adres kısmını İl / İlçe olarak ayırdık
+adres = st.sidebar.text_area("Açık Adres (İl ve İlçe Hariç)")
+col_ilce, col_il = st.sidebar.columns(2)
+with col_ilce:
+    ilce = st.text_input("İlçe")
+with col_il:
+    il = st.text_input("İl")
+
 odeme_tipi = st.sidebar.radio("Ödeme Tipi", ["ALICI", "PEŞİN"], index=0)
-musteri_data = {'AD_SOYAD': ad_soyad, 'TELEFON': telefon, 'ADRES': adres, 'ODEME_TIPI': odeme_tipi}
+
+musteri_data = {
+    'AD_SOYAD': ad_soyad, 
+    'TELEFON': telefon, 
+    'ADRES': adres, 
+    'ILCE': ilce,
+    'IL': il,
+    'ODEME_TIPI': odeme_tipi
+}
 
 tab_dosya, tab_manuel = st.tabs(["📂 Dosya ile Hesapla", "🧮 Manuel Hesaplayıcı"])
 
@@ -491,13 +525,14 @@ with tab_dosya:
         col_pdf1, col_pdf2, col_pdf3 = st.columns(3)
         
         pdf_cargo = create_cargo_pdf(proje_toplam_desi, toplam_parca, musteri_data, final_etiket_listesi)
-        col_pdf1.download_button(label="📄 1. KARGO FISI (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf1.download_button(label="📄 1. KARGO FİŞİ (A4)", data=pdf_cargo, file_name="Kargo_Fisi.pdf", mime="application/pdf", use_container_width=True)
 
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
-        col_pdf2.download_button(label="🏭 2. URETIM & ETIKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf2.download_button(label="🏭 2. ÜRETİM & ETİKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
+        # GÜNCEL TERMAL BUTON
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
