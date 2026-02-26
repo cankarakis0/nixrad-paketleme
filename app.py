@@ -235,7 +235,7 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (Tam Dinamik Ölçekleme ve <br/> Düzeltmesi)
+# GÜNCELLENMİŞ TERMAL ETİKET (Alan Tasarrufu + Kargo Uyarı Notu)
 # =============================================================================
 def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
@@ -254,46 +254,43 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         try:
             response = requests.get(logo_url)
             logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 4*mm, d_height - 14*mm, width=25*mm, height=10*mm, mask='auto')
+            c.drawImage(logo_img, 4*mm, d_height - 12*mm, width=25*mm, height=10*mm, mask='auto')
         except: pass
 
         no_str = f"PAKET: {p['sira_no']} / {toplam_etiket_sayisi}"
         alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'MUSTERI ADI'))
         alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI')).replace('<br/>', ' ')
         alici_tel = musteri_bilgileri.get('TELEFON', 'TELEFON YOK')
-        
-        # Ürün adı artık Excel'deki orijinal uzun ismi barındırıyor
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
-        
         desi_text = f"DESI : {p['desi_val']}"
         odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
         il_ilce_metni = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', '')).upper()
 
-        # 2. Gonderen Bilgileri
+        # 2. Gonderen Bilgileri (Yukarida daha sıkı hizalandı)
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(45*mm, d_height - 5*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
+        c.drawString(45*mm, d_height - 4*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
         c.setFont("Helvetica", 7)
-        c.drawString(45*mm, d_height - 9*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN")
-        c.drawString(45*mm, d_height - 13*mm, "Tel: 0262 658 11 58")
+        c.drawString(45*mm, d_height - 7.5*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN")
+        c.drawString(45*mm, d_height - 11*mm, "Tel: 0262 658 11 58")
         
         c.setLineWidth(0.4)
-        c.line(3*mm, d_height - 17*mm, d_width - 3*mm, d_height - 17*mm)
+        c.line(3*mm, d_height - 14*mm, d_width - 3*mm, d_height - 14*mm)
         
-        # 3. Alici Musteri - TAM DINAMIK (Daima satıra sığacak şekilde font küçülür)
+        # 3. Alici Musteri
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(5*mm, d_height - 23*mm, "ALICI MUSTERI:")
+        c.drawString(5*mm, d_height - 19*mm, "ALICI MUSTERI:")
         
-        ad_font = 17 # Baslangic buyuklugu
+        ad_font = 17 
         while c.stringWidth(alici_ad, "Helvetica-Bold", ad_font) > (d_width - 10*mm) and ad_font > 7:
             ad_font -= 1
         
         c.setFont("Helvetica-Bold", ad_font)
-        c.drawString(5*mm, d_height - 31*mm, alici_ad)
-        c.line(3*mm, d_height - 34*mm, d_width - 3*mm, d_height - 34*mm)
+        c.drawString(5*mm, d_height - 26*mm, alici_ad)
+        c.line(3*mm, d_height - 29*mm, d_width - 3*mm, d_height - 29*mm)
         
-        # 4. Adres 
+        # 4. Adres
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, d_height - 40*mm, "ADRES :")
+        c.drawString(5*mm, d_height - 34*mm, "ADRES :")
         
         adres_uzunluk = len(alici_adres)
         if adres_uzunluk <= 70: adres_font, adres_lead = 14, 16
@@ -301,7 +298,7 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
         elif adres_uzunluk <= 160: adres_font, adres_lead = 10, 12
         else: adres_font, adres_lead = 8, 10
             
-        text_obj = c.beginText(24*mm, d_height - 40*mm)
+        text_obj = c.beginText(24*mm, d_height - 34*mm)
         text_obj.setFont("Helvetica", adres_font)
         text_obj.setLeading(adres_lead)
         
@@ -321,39 +318,47 @@ def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam
             text_obj.textLine(line)
         c.drawText(text_obj)
         
-        # İl / İlçe Orantılı Yazdırma (Adres fontundan 1 tık büyük)
         kalan_y = text_obj.getY() 
         if il_ilce_metni:
             il_ilce_font = adres_font + 1 
             c.setFont("Helvetica-Bold", il_ilce_font) 
-            c.drawString(24*mm, kalan_y - 3*mm, il_ilce_metni)
+            c.drawString(24*mm, kalan_y - 2*mm, il_ilce_metni)
             
-        c.line(3*mm, d_height - 58*mm, d_width - 3*mm, d_height - 58*mm)
+        c.line(3*mm, d_height - 49*mm, d_width - 3*mm, d_height - 49*mm)
         
         # 5. Telefon
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, d_height - 65*mm, f"TEL : {alici_tel}")
+        c.drawString(5*mm, d_height - 54*mm, f"TEL : {alici_tel}")
         
-        # --- Ürün Adı (Uzun Stok İsimleri İçin Tam Dinamik) ---
-        urun_font = 15 # Baslangic buyuklugu
-        # Eğer ürün adı çok uzunsa sığana kadar fontu 6'ya kadar düşürür
+        c.setFont("Helvetica-Bold", 13)
+        c.drawRightString(d_width - 5*mm, d_height - 54*mm, odeme_tipi_val)
+
+        # Urun Adi
+        urun_font = 15 
         while c.stringWidth(urun_adi, "Helvetica-Bold", urun_font) > (d_width - 10*mm) and urun_font > 6:
             urun_font -= 1
             
         c.setFont("Helvetica-Bold", urun_font)
-        c.drawString(5*mm, d_height - 74*mm, urun_adi)
+        c.drawString(5*mm, d_height - 62*mm, urun_adi)
 
-        # 6. Odeme Tipi
-        c.setFont("Helvetica-Bold", 13)
-        c.drawRightString(d_width - 5*mm, d_height - 65*mm, odeme_tipi_val)
-        
-        # 7. Desi ve Paket No
+        # 6. Desi ve Paket No
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, d_height - 80*mm, desi_text)
+        c.drawString(5*mm, d_height - 69*mm, desi_text)
         
         c.setFont("Helvetica-Bold", 15)
-        c.drawRightString(d_width - 5*mm, d_height - 80*mm, no_str)
+        c.drawRightString(d_width - 5*mm, d_height - 69*mm, no_str)
         
+        # --- YENİ: Kargo Teslimat Uyarı Notu ---
+        # Araya ince ayirici bir cizgi koyuyoruz
+        c.setLineWidth(0.2)
+        c.line(3*mm, d_height - 72.5*mm, d_width - 3*mm, d_height - 72.5*mm)
+        
+        uyari_1 = "LÜTFEN KARGONUZU TESLİM ALIRKEN PAKETİ KONTROL EDİNİZ. HASAR VEYA EKSİK ÜRÜN VARSA"
+        uyari_2 = "AYNI GÜN KARGO GÖREVLİSİNE TUTANAK TUTTURUNUZ. AKSİ HALDE SORUMLULUK ALICIYA AİTTİR."
+        c.setFont("Helvetica-Bold", 5.5)
+        c.drawCentredString(d_width / 2.0, d_height - 75.5*mm, uyari_1)
+        c.drawCentredString(d_width / 2.0, d_height - 78*mm, uyari_2)
+
         c.restoreState()
         c.showPage()
     
@@ -519,7 +524,7 @@ with tab_dosya:
         col_pdf2.download_button(label="🏭 2. ÜRETİM & ETİKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
         pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETIKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
