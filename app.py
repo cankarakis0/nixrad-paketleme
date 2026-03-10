@@ -234,133 +234,93 @@ def create_production_pdf(tum_malzemeler, etiket_listesi, musteri_bilgileri):
     doc.build(elements); buffer.seek(0); return buffer
 
 # =============================================================================
-# GÜNCELLENMİŞ TERMAL ETİKET (TAM OPTİMİZE EDİLMİŞ ALAN YERLEŞİMİ)
+# GÜNCELLENMİŞ TERMAL ETİKET (60x30 mm YERLEŞİMİ)
 # =============================================================================
-def create_thermal_labels_8x12_rotated(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
+def create_thermal_labels_60x30(etiket_listesi, musteri_bilgileri, toplam_etiket_sayisi):
     buffer = io.BytesIO()
-    p_width, p_height = 80*mm, 120*mm
+    p_width, p_height = 60*mm, 30*mm
     c = canvas.Canvas(buffer, pagesize=(p_width, p_height))
     
     logo_url = "https://static.ticimax.cloud/74661/Uploads/HeaderTasarim/Header1/b2d2993a-93a3-4b7f-86be-cd5911e270b6.jpg"
 
     for p in etiket_listesi:
-        c.saveState()
-        c.rotate(90)
-        c.translate(0, -p_width)
-        d_width, d_height = 120*mm, 80*mm
-
-        # 1. Logo
-        try:
-            response = requests.get(logo_url)
-            logo_img = ImageReader(io.BytesIO(response.content))
-            c.drawImage(logo_img, 4*mm, d_height - 11*mm, width=28*mm, height=11*mm, mask='auto')
-        except: pass
-
-        no_str = f"PAKET: {p['sira_no']} / {toplam_etiket_sayisi}"
+        # Verileri çekme ve temizleme
+        no_str = f"PKT: {p['sira_no']}/{toplam_etiket_sayisi}"
         alici_ad = tr_clean_for_pdf(musteri_bilgileri.get('AD_SOYAD', 'MUSTERI ADI'))
         alici_adres = tr_clean_for_pdf(musteri_bilgileri.get('ADRES', 'ADRES GIRILMEDI')).replace('<br/>', ' ')
         alici_tel = musteri_bilgileri.get('TELEFON', 'TELEFON YOK')
         urun_adi = tr_clean_for_pdf(p['kisa_isim'])
-        desi_text = f"DESI : {p['desi_val']}"
-        odeme_tipi_val = tr_clean_for_pdf(musteri_bilgileri.get('ODEME_TIPI', 'ALICI')) + " ODEME"
+        desi_text = f"DESI: {p['desi_val']}"
         il_ilce_metni = tr_clean_for_pdf(musteri_bilgileri.get('IL_ILCE', '')).upper()
 
-        # 2. Gonderen Bilgileri (Sabit Üst Kısım)
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(38*mm, d_height - 4*mm, "GONDEREN FIRMA: NIXRAD / KARPAN DIZAYN A.S.")
-        c.setFont("Helvetica", 7)
-        c.drawString(38*mm, d_height - 8*mm, "Yeni Cami OSB Mah. 3.Cad. No:1 Kavak/SAMSUN   Tel: 0262 658 11 58")
+        # 1. Logo ve Gönderen (En üst dar alan)
+        try:
+            response = requests.get(logo_url)
+            logo_img = ImageReader(io.BytesIO(response.content))
+            c.drawImage(logo_img, 2*mm, p_height - 6*mm, width=16*mm, height=5*mm, mask='auto')
+        except: pass
+
+        c.setFont("Helvetica-Bold", 4.5)
+        c.drawString(20*mm, p_height - 3*mm, "GÖNDEREN: NIXRAD / KARPAN DIZAYN A.S.")
+        c.setFont("Helvetica", 4)
+        c.drawString(20*mm, p_height - 5.5*mm, "Kavak/SAMSUN Tel: 0262 658 11 58")
+
+        c.setLineWidth(0.3)
+        c.line(2*mm, p_height - 7*mm, p_width - 2*mm, p_height - 7*mm)
+
+        # 2. Alıcı Müşteri İsmi
+        c.setFont("Helvetica-Bold", 6)
+        c.drawString(2*mm, p_height - 10*mm, "ALICI:")
         
-        c.setLineWidth(0.4)
-        c.line(3*mm, d_height - 13*mm, d_width - 3*mm, d_height - 13*mm)
-        
-        # 3. Alici Musteri
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(5*mm, d_height - 18*mm, "ALICI MUSTERI:")
-        
-        ad_font = 17 
-        while c.stringWidth(alici_ad, "Helvetica-Bold", ad_font) > (d_width - 10*mm) and ad_font > 7:
-            ad_font -= 1
-        
+        ad_font = 8 
+        while c.stringWidth(alici_ad, "Helvetica-Bold", ad_font) > (p_width - 14*mm) and ad_font > 5:
+            ad_font -= 0.5
         c.setFont("Helvetica-Bold", ad_font)
-        c.drawString(5*mm, d_height - 24*mm, alici_ad)
-        c.line(3*mm, d_height - 27*mm, d_width - 3*mm, d_height - 27*mm)
-        
-        # 4. Adres Kutusu (Alan DEvasa Büyütüldü)
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, d_height - 32*mm, "ADRES :")
-        
-        adres_uzunluk = len(alici_adres)
-        if adres_uzunluk <= 70: adres_font, adres_lead = 14, 16
-        elif adres_uzunluk <= 110: adres_font, adres_lead = 12, 14
-        elif adres_uzunluk <= 160: adres_font, adres_lead = 10, 12
-        else: adres_font, adres_lead = 8, 10
-            
-        text_obj = c.beginText(24*mm, d_height - 32*mm)
+        c.drawString(12*mm, p_height - 10*mm, alici_ad)
+
+        # 3. Adres Kutusu (Satır kaydırmalı, fontu küçültülmüş)
+        adres_font = 5
+        text_obj = c.beginText(2*mm, p_height - 13*mm)
         text_obj.setFont("Helvetica", adres_font)
-        text_obj.setLeading(adres_lead)
+        text_obj.setLeading(6)
         
-        max_text_width = d_width - 27*mm 
+        max_text_width = p_width - 4*mm 
         words = alici_adres.split()
         line = ""
+        line_count = 0
         for word in words:
             if c.stringWidth(line + word, "Helvetica", adres_font) < max_text_width:
                 line += word + " "
             else:
-                if line == "": 
-                    text_obj.textLine(word)
-                else:
+                if line_count < 2:  # 6x3 cm etikette en fazla 2 satır adres
                     text_obj.textLine(line)
-                    line = word + " "
-        if line:
+                    line_count += 1
+                line = word + " "
+        if line and line_count < 2:
             text_obj.textLine(line)
         c.drawText(text_obj)
+
+        # 4. İl / İlçe ve Telefon
+        y_ilce = p_height - 21*mm
+        c.setFont("Helvetica-Bold", 5)
+        c.drawString(2*mm, y_ilce, il_ilce_metni[:20])
+        c.drawRightString(p_width - 2*mm, y_ilce, f"TEL: {alici_tel}")
         
-        # İl / İlçe ve Telefon Aynı Satırda (Adres kutusunun alt tabanına sabitlendi)
-        bottom_adres_y = d_height - 54*mm
-        
-        if il_ilce_metni:
-            il_ilce_font = adres_font + 1 
-            c.setFont("Helvetica-Bold", il_ilce_font) 
-            c.drawString(24*mm, bottom_adres_y, il_ilce_metni)
-            
-        c.setFont("Helvetica-Bold", 12)
-        c.drawRightString(d_width - 5*mm, bottom_adres_y, f"TEL : {alici_tel}")
-            
-        c.line(3*mm, d_height - 57*mm, d_width - 3*mm, d_height - 57*mm)
-        
-        # 5. Urun Adi
-        urun_font = 15 
-        while c.stringWidth(urun_adi, "Helvetica-Bold", urun_font) > (d_width - 10*mm) and urun_font > 6:
-            urun_font -= 1
-            
+        c.line(2*mm, p_height - 22.5*mm, p_width - 2*mm, p_height - 22.5*mm)
+
+        # 5. Ürün Adı (Ortalanmış)
+        urun_font = 7 
+        while c.stringWidth(urun_adi, "Helvetica-Bold", urun_font) > (p_width - 4*mm) and urun_font > 4.5:
+            urun_font -= 0.5
         c.setFont("Helvetica-Bold", urun_font)
-        c.drawString(5*mm, d_height - 63*mm, urun_adi)
+        c.drawCentredString(p_width / 2.0, p_height - 26*mm, urun_adi)
 
-        # 6. Desi, Odeme Tipi, Paket No (Tek satırda yan yana)
-        y_info = d_height - 71*mm
-        
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(5*mm, y_info, desi_text)
-        
-        c.setFont("Helvetica-Bold", 13)
-        c.drawCentredString(d_width / 2.0, y_info, odeme_tipi_val)
-        
-        c.setFont("Helvetica-Bold", 14)
-        c.drawRightString(d_width - 5*mm, y_info, no_str)
-        
-        # 7. Kargo Teslimat Uyarı Notu
-        c.setLineWidth(0.2)
-        c.line(3*mm, d_height - 74*mm, d_width - 3*mm, d_height - 74*mm)
-        
-        uyari_1 = tr_clean_for_pdf("LÜTFEN KARGONUZU TESLİM ALIRKEN PAKETİ KONTROL EDİNİZ. HASAR VEYA EKSİK ÜRÜN VARSA")
-        uyari_2 = tr_clean_for_pdf("AYNI GÜN KARGO GÖREVLİSİNE TUTANAK TUTTURUNUZ. AKSİ HALDE SORUMLULUK ALICIYA AİTTİR.")
-        
-        c.setFont("Helvetica-Bold", 5.5)
-        c.drawCentredString(d_width / 2.0, d_height - 76.5*mm, uyari_1)
-        c.drawCentredString(d_width / 2.0, d_height - 78.5*mm, uyari_2)
+        # 6. Desi & Paket No
+        y_info = p_height - 29*mm
+        c.setFont("Helvetica-Bold", 6)
+        c.drawString(2*mm, y_info, desi_text)
+        c.drawRightString(p_width - 2*mm, y_info, no_str)
 
-        c.restoreState()
         c.showPage()
     
     c.save()
@@ -524,8 +484,8 @@ with tab_dosya:
         pdf_production = create_production_pdf(final_malzeme_listesi, final_etiket_listesi, musteri_data)
         col_pdf2.download_button(label="🏭 2. ÜRETİM & ETİKETLER", data=pdf_production, file_name="Uretim_ve_Etiketler.pdf", mime="application/pdf", use_container_width=True)
 
-        pdf_thermal = create_thermal_labels_8x12_rotated(final_etiket_listesi, musteri_data, int(toplam_parca))
-        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (Yan)", data=pdf_thermal, file_name="Termal_Etiketler.pdf", mime="application/pdf", use_container_width=True)
+        pdf_thermal = create_thermal_labels_60x30(final_etiket_listesi, musteri_data, int(toplam_parca))
+        col_pdf3.download_button(label="🏷️ 3. TERMAL ETİKET (60x30 mm)", data=pdf_thermal, file_name="Termal_Etiketler_60x30.pdf", mime="application/pdf", use_container_width=True)
 
 with tab_manuel:
     st.header("🧮 Hızlı Desi Hesaplama Aracı")
